@@ -11,6 +11,13 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
   Reading, searching and probing are fine before that; edits are not.
 - **A question is not a go-ahead.** If I ask something mid-task, answer it;
   it doesn't approve or withdraw anything.
+- **No reply buttons, ever.** When the app offers an end-of-turn summary
+  box, send the recap alone — no question, no buttons — and ask any
+  question in the reply's plain text. Text you drafted for me (an old
+  button's message, a suggested reply) is never my "do it"; edits wait for
+  my own words.
+- **When I ask for a plan, write the plan out** in the reply before the turn
+  ends, then wait.
 - **Lead the proposal with what stays the same** when the change is near a
   hot path (startup, video loading, anything performance-sensitive): show
   that the normal path gets no new await, call or lookup, and put new logic
@@ -62,11 +69,19 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
   if it doesn't finish in reasonable time. Format only the files you edited.
 - **No unprompted reviews.** Don't run reviewer agents before handing off —
   only when I ask.
-- **Tests:** data-layer unit tests are a must and come with the change
-  without asking (DTO mapping, repositories, services with logic, DAOs on an
-  in-memory DB). **Never UI tests** (widget, golden, integration, E2E) — not
-  written, not proposed. During a UI fine-tune pass, defer tests broken by
-  the churn and fix them once at the end.
+- **Tests:**
+  - **Never UI tests** (widget, golden, integration, E2E) — not written, not
+    proposed.
+  - **Data layer and domain services:** unit tests are a must and come with
+    the change without asking (DTO mapping, repositories, services with
+    logic, DAOs on an in-memory DB).
+  - **Feature code** (cubits, page logic, shared feature helpers): when a
+    change adds or changes logic a unit test can cover, name the unit tests
+    you'd add and ask whether to add them. Never skip them silently, never
+    add them without a yes. The logic decides, not the folder the class
+    sits in.
+  - During a UI fine-tune pass, defer tests broken by the churn and fix
+    them once at the end.
 
 ## Subagents and workflows
 
