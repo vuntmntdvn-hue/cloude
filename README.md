@@ -18,20 +18,28 @@ cd ~/claude-portable
 |---|---|---|
 | `CLAUDE.md` | `~/.claude/CLAUDE.md` | Global instructions: how the user works (propose → "do it" → edit → report; no unasked commits or builds; tests; subagents; UI and backend habits). |
 | `skills/low-priority-build/` | `~/.claude/skills/low-priority-build/` | A skill that runs long builds at low priority with capped Gradle workers, so the machine stays usable. `CLAUDE.md` refers to it. |
-| `settings.hooks.json` | merged into `~/.claude/settings.json` | One hook, plus two preferences (below). |
+| `settings.hooks.json` | merged into `~/.claude/settings.json` | Two hooks, plus two preferences (below). |
 | — | pub's global bin | **build_ntd**, the user's own Flutter build CLI. Not in this repo; installed from its own (step 6). |
 
 `~` is the user's home folder: `C:\Users\<name>` on Windows (Git Bash shows it
 as `/c/Users/<name>`), `/home/<name>` on Linux.
 
-### The hook
+### The hooks
 
-A `PreToolUse` hook on the `Agent` tool. Before any subagent starts, it turns
-the call into a permission prompt that reads *"Subagent Explore on model:
-haiku | <description>"*, or *"model: NOT SET (agent default / inherited)"*.
-The user approves or denies it. It backs up the `CLAUDE.md` rule "ask which
-model before every subagent". Nothing is blocked outright (`"ask"`, not
-`"deny"`).
+Both are `PreToolUse` hooks: they see a tool call before it runs.
+
+- **On the `Agent` tool:** before any subagent starts, it turns the call into
+  a permission prompt that reads *"Subagent Explore on model: haiku |
+  <description>"*, or *"model: NOT SET (agent default / inherited)"*. The
+  user approves or denies it. It backs up the `CLAUDE.md` rule "ask which
+  model before every subagent". Nothing is blocked outright (`"ask"`, not
+  `"deny"`).
+- **On the `PowerShell` tool (Windows):** it refuses `git push` and a
+  `git commit` with `-m` / `--message`, telling Claude to run them with the
+  Bash tool (Git Bash) instead — Windows PowerShell 5.1 splits a message at
+  the quotes inside it, and its push may have no GitHub sign-in. Everything
+  else goes through untouched, `git commit -F <file>` included. On Linux and
+  macOS there is no `PowerShell` tool, so it never runs.
 
 The other two keys are preferences: `outputStyle: "Explanatory"` and
 `effortLevel: "high"`. Ask the user whether they want them on this machine.
@@ -83,8 +91,9 @@ jq -s '.[0] as $a | .[1] as $b
 ```
 
 If the user doesn't want `outputStyle` / `effortLevel`, delete those keys
-from `settings.json` afterwards. If the merge was run twice, the hook appears
-twice. Check that `.hooks.PreToolUse` holds one `"matcher": "Agent"` entry.
+from `settings.json` afterwards. If the merge was run twice, the hooks appear
+twice. Check that `.hooks.PreToolUse` holds one `"matcher": "Agent"` entry
+and one `"matcher": "PowerShell"` entry.
 
 ## 4. Check each piece
 
@@ -96,9 +105,16 @@ twice. Check that `.hooks.PreToolUse` holds one `"matcher": "Agent"` entry.
   On Linux, to see the priority took:
   `... -- sh -c 'nice; ionice -p $$'` should print `10` and
   `best-effort: prio 7` (the second only when `ionice` exists).
-- **Hook.** In a new Claude Code session, ask for anything that spawns a
-  subagent. A permission prompt naming the subagent and its model must
+- **Agent hook.** In a new Claude Code session, ask for anything that spawns
+  a subagent. A permission prompt naming the subagent and its model must
   appear. If the call errors instead, `jq` isn't on the PATH.
+- **PowerShell hook (Windows).** Without a session, feed it a fake call — it
+  prints a `deny` for a `git push`, and nothing for an allowed command:
+  ```bash
+  HOOK=$(jq -r '.hooks.PreToolUse[] | select(.matcher=="PowerShell") | .hooks[0].command' ~/.claude/settings.json)
+  echo '{"tool_input":{"command":"git push"}}' | bash -c "$HOOK"
+  echo '{"tool_input":{"command":"git status"}}' | bash -c "$HOOK"
+  ```
 - **CLAUDE.md.** In a new session, ask Claude to change some code. It should
   restate the request, list edge cases and wait for "do it" before editing.
 

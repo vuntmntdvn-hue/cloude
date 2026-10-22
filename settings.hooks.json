@@ -10,6 +10,16 @@
             "statusMessage": "Confirming subagent model"
           }
         ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -c 'if ((.tool_input.command // \"\") | test(\"\\\\bgit\\\\s+push\\\\b\") or test(\"\\\\bgit\\\\s+commit\\\\b.*\\\\s(-[a-zA-Z]*m|--message)\")) then {hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"deny\",permissionDecisionReason:\"Run git commit -m and git push with the Bash tool (Git Bash), not PowerShell: Windows PowerShell 5.1 splits arguments at quotes inside them, and its git push may have no sign-in. Commit with git commit -F - and a heredoc.\"}} else empty end'",
+            "statusMessage": "Checking git command shell"
+          }
+        ]
       }
     ]
   },

@@ -47,6 +47,13 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
   with `-U3` context, then commit with that variable set) — never stage into
   the shared index, even for a moment. Don't pipe patches through text-mode
   Python on Windows (CRLF).
+- **On Windows, commit and push from Git Bash, not PowerShell.** Windows
+  PowerShell 5.1 doesn't escape `"` inside an argument it passes to `git`, so
+  a message that quotes something is split into extra arguments, which git
+  reads as file names. Commit with the message on stdin —
+  `git commit -F - <<'EOF'` … `EOF` — and push from Git Bash too: its GitHub
+  sign-in can work where PowerShell's fails ("terminal prompts disabled").
+  A hook in the kit refuses both in PowerShell.
 - Work on the branch the team works on (e.g. `dev`); release branches are
   merged by someone else — read them, don't edit them.
 
