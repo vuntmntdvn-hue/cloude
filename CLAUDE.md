@@ -165,9 +165,22 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
 
 ## Memory and docs
 
-- **Keep `CLAUDE.md` current as decisions land**: dated ("since 2026-10-15"),
-  with the why and "the user's call" where it was mine, so a new session
-  doesn't re-litigate it.
+- **Where new knowledge goes:**
+  - **`CLAUDE.md`** keeps only what every session needs: the stack, the
+    working rules, an index of the areas.
+  - **Detail about one area** goes into its own rule file,
+    `.claude/rules/<area>.md`, with `paths:` frontmatter for its source and
+    test folders, so it loads only when those files are read. A new area
+    gets a new file and a line in `CLAUDE.md`'s index. When `CLAUDE.md`
+    grows past what every session needs, split it this way.
+  - **Memory** is for what isn't the project's own fact: personal
+    preferences and how to work with me. It stays on one machine and out of
+    git, so a project fact goes into a rule file instead, where the team and
+    every machine get it.
+- **Docs state current facts only**: what the code does now — no history,
+  "since <date>" or "changed from" notes, decision logs or plans. When a doc
+  drifts, rewrite the part as current fact; git history is the record. A
+  rule may keep its *why* in a clause, so nobody re-litigates it.
 - Save feedback I give (corrections *and* approaches I confirm) to memory
   with **Why** and **How to apply**; update an existing memory rather than
   adding a duplicate.
