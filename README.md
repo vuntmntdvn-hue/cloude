@@ -19,6 +19,7 @@ cd ~/claude-portable
 | `CLAUDE.md` | `~/.claude/CLAUDE.md` | Global instructions: how the user works (propose → "do it" → edit → report; no unasked commits or builds; tests; subagents; UI and backend habits). |
 | `skills/low-priority-build/` | `~/.claude/skills/low-priority-build/` | A skill that runs long builds at low priority with capped Gradle workers, so the machine stays usable. `CLAUDE.md` refers to it. |
 | `settings.hooks.json` | merged into `~/.claude/settings.json` | Two hooks, plus two preferences (below). |
+| `bin/kill-builds.sh` | `~/.local/bin/kill-builds` (link) · Windows: `~/bin/kill-builds` (copy) | Stops every Java, Gradle, Kotlin-daemon and Dart process of the user, to free the machine or clear a stuck build (below). |
 | — | pub's global bin | **build_ntd**, the user's own Flutter build CLI. Not in this repo; installed from its own (step 6). |
 
 `~` is the user's home folder: `C:\Users\<name>` on Windows (Git Bash shows it
@@ -43,6 +44,21 @@ Both are `PreToolUse` hooks: they see a tool call before it runs.
 
 The other two keys are preferences: `outputStyle: "Explanatory"` and
 `effortLevel: "high"`. Ask the user whether they want them on this machine.
+
+### kill-builds
+
+`kill-builds` stops the user's `java`, `dart`, `dartaotruntime` and
+`flutter_tester` processes, and anything whose command line names a Gradle
+or Kotlin daemon. It prints each one before acting.
+
+- It spares the editor's Dart language server and the Dart MCP server; `-a`
+  kills those too. `-n` lists what it would kill and kills nothing.
+- Linux / macOS: `SIGTERM` first so Gradle can release its locks, then
+  `SIGKILL` whatever is left after 3 s. Windows: a forced stop through
+  PowerShell, the only way there to see a process's command line.
+- Every `flutter run` session dies with it, and any other Java app the user
+  has open. Android Studio itself survives (it isn't `java`), but loses its
+  Gradle sync.
 
 ## 1. Install the prerequisites
 
@@ -70,6 +86,21 @@ mkdir -p ~/.claude/skills
 [ -e ~/.claude/CLAUDE.md ] || cp CLAUDE.md ~/.claude/CLAUDE.md
 cp -r skills/low-priority-build ~/.claude/skills/
 chmod +x ~/.claude/skills/low-priority-build/lowprio-build.sh
+```
+
+`kill-builds`: on Linux and macOS, link it, so a `git pull` here updates it.
+`~/.local/bin` must be on `PATH`.
+
+```bash
+mkdir -p ~/.local/bin
+ln -sf "$PWD/bin/kill-builds.sh" ~/.local/bin/kill-builds
+```
+
+On Windows, copy it into `~/bin`, which Git Bash puts on `PATH` (symlinks
+there need extra setup), and copy it again after a `git pull`:
+
+```bash
+mkdir -p ~/bin && cp bin/kill-builds.sh ~/bin/kill-builds
 ```
 
 ## 3. Merge the settings
@@ -115,6 +146,9 @@ and one `"matcher": "PowerShell"` entry.
   echo '{"tool_input":{"command":"git push"}}' | bash -c "$HOOK"
   echo '{"tool_input":{"command":"git status"}}' | bash -c "$HOOK"
   ```
+- **kill-builds.** `kill-builds -n` lists the processes, marks the Dart
+  language server and MCP server `spare`, and ends with
+  `dry run: killed nothing` (or `nothing to kill`).
 - **CLAUDE.md.** In a new session, ask Claude to change some code. It should
   restate the request, list edge cases and wait for "do it" before editing.
 
