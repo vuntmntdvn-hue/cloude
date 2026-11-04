@@ -16,9 +16,10 @@ cd ~/claude-portable
 
 | File | Goes to | What it is |
 |---|---|---|
-| `CLAUDE.md` | `~/.claude/CLAUDE.md` | Global instructions: how the user works (propose → "do it" → edit → report; no unasked commits or builds; tests; subagents; UI and backend habits). |
+| `global/CLAUDE.md` | `~/.claude/CLAUDE.md` (link) · Windows: copy | Global instructions: how the user works (propose → "do it" → edit → report; no unasked commits or builds; tests; subagents; SOLID and clean code; memory and docs). |
+| `global/rules/flutter-app.md` | `~/.claude/rules/flutter-app.md` (link) · Windows: copy | Flutter app and backend habits (phone builds, `dart analyze`, localization, layering, UI and Figma, API contracts). Loads in any project once a Dart, pubspec, ARB or OpenAPI file is read. |
 | `skills/low-priority-build/` | `~/.claude/skills/low-priority-build/` | A skill that runs long builds at low priority with capped Gradle workers, so the machine stays usable. `CLAUDE.md` refers to it. |
-| `settings.hooks.json` | merged into `~/.claude/settings.json` | Two hooks, plus two preferences (below). |
+| `settings.hooks.json` | merged into `~/.claude/settings.json` | Two hooks, plus one preference (below). |
 | `bin/kill-builds.sh` | `~/.local/bin/kill-builds` (link) · Windows: `~/bin/kill-builds` (copy) | Stops every Java, Gradle, Kotlin-daemon and Dart process of the user, to free the machine or clear a stuck build (below). |
 | — | pub's global bin | **build_ntd**, the user's own Flutter build CLI. Not in this repo; installed from its own (step 6). |
 
@@ -42,8 +43,9 @@ Both are `PreToolUse` hooks: they see a tool call before it runs.
   else goes through untouched, `git commit -F <file>` included. On Linux and
   macOS there is no `PowerShell` tool, so it never runs.
 
-The other two keys are preferences: `outputStyle: "Explanatory"` and
-`effortLevel: "high"`. Ask the user whether they want them on this machine.
+The other key is a preference, `effortLevel: "high"`. Ask the user whether
+they want it on this machine. The kit sets no output style: the default one
+keeps replies plain, as `CLAUDE.md` asks.
 
 ### kill-builds
 
@@ -80,12 +82,22 @@ or Kotlin daemon. It prints each one before acting.
 From this folder, in bash (Git Bash on Windows):
 
 ```bash
-mkdir -p ~/.claude/skills
-# CLAUDE.md: if ~/.claude/CLAUDE.md exists, show the user both and ask
-# whether to replace it or merge them. Never overwrite it silently.
-[ -e ~/.claude/CLAUDE.md ] || cp CLAUDE.md ~/.claude/CLAUDE.md
+mkdir -p ~/.claude/skills ~/.claude/rules
+# CLAUDE.md: if ~/.claude/CLAUDE.md exists and isn't already this link (a
+# copy from an older install, or the user's own), show the user both and
+# ask whether to replace it or merge them. Never overwrite it silently.
+[ -e ~/.claude/CLAUDE.md ] || ln -s "$PWD/global/CLAUDE.md" ~/.claude/CLAUDE.md
+ln -sf "$PWD/global/rules/flutter-app.md" ~/.claude/rules/flutter-app.md
 cp -r skills/low-priority-build ~/.claude/skills/
 chmod +x ~/.claude/skills/low-priority-build/lowprio-build.sh
+```
+
+The links mean a `git pull` here updates the instructions on this machine.
+On Windows, Git Bash's `ln -s` makes a copy instead (real links there need
+Developer Mode), so copy both files again after each pull:
+
+```bash
+cp global/CLAUDE.md ~/.claude/CLAUDE.md && cp global/rules/flutter-app.md ~/.claude/rules/
 ```
 
 `kill-builds`: on Linux and macOS, link it, so a `git pull` here updates it.
@@ -121,8 +133,9 @@ jq -s '.[0] as $a | .[1] as $b
   && mv settings.new settings.json
 ```
 
-If the user doesn't want `outputStyle` / `effortLevel`, delete those keys
-from `settings.json` afterwards. If the merge was run twice, the hooks appear
+If the user doesn't want `effortLevel`, delete that key from `settings.json`
+afterwards. A merge of an older kit left `outputStyle: "Explanatory"`
+behind: delete it too, unless the user wants it. If the merge was run twice, the hooks appear
 twice. Check that `.hooks.PreToolUse` holds one `"matcher": "Agent"` entry
 and one `"matcher": "PowerShell"` entry.
 
@@ -150,7 +163,12 @@ and one `"matcher": "PowerShell"` entry.
   language server and MCP server `spare`, and ends with
   `dry run: killed nothing` (or `nothing to kill`).
 - **CLAUDE.md.** In a new session, ask Claude to change some code. It should
-  restate the request, list edge cases and wait for "do it" before editing.
+  answer with a proposal in the headed sections `CLAUDE.md` lists and wait
+  for "do it" before editing. `ls -l ~/.claude/CLAUDE.md` shows the link
+  into this folder (Windows: a plain file).
+- **Flutter rules.** In a Flutter project, have Claude read a `.dart` file,
+  then ask what it does with colours from Figma. It should quote the rule
+  from `flutter-app.md`.
 
 ## 5. Adjust for this machine
 

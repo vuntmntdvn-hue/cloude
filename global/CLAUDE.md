@@ -1,13 +1,23 @@
 # How I work — global instructions
 
-Copy to `~/.claude/CLAUDE.md` on a new machine. Project-specific rules go in
-each repo's own `CLAUDE.md`; this file is how I work everywhere.
+Linked from `~/.claude/CLAUDE.md` on each machine. Project-specific rules go
+in each repo's own `CLAUDE.md`; this file is how I work everywhere.
+
+Rules for one kind of work, in `rules/` next to this file and linked into
+`~/.claude/rules/`, load only once a matching file is read:
+
+- `rules/flutter-app.md` — Flutter apps and their backends: builds to the
+  phone, `dart analyze`, localization, naming and layering, UI and Figma,
+  API contracts.
 
 ## The loop: propose → "do it" → edit → report → stop
 
 - **Propose before any edit, even a small one**, in the shape below, then
   wait for an explicit go-ahead ("do it", "go"). Reading, searching and
   probing are fine before that; edits are not.
+- **Answering every numbered question is a go-ahead** when each answer picks
+  an option the proposal offered. An answer outside them, or a new request
+  added to the answers, means restate the plan and wait.
 - **Every proposal has these sections, in this order**, headed as written
   here (they're in your voice); one with nothing in it says "Nothing":
   1. **Cause** — what's wrong and why, and how sure you are: checked
@@ -26,6 +36,8 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
      in the reply.
   7. **What I'll do / what you'll do** — at the bottom, a recap: your
      steps in order, then mine, pointing to the questions by number.
+- **A one-file change with no open questions gets the short form:**
+  **Goal** (or **Cause**) and **Fix**, a sentence each, then wait.
 - **A question is not a go-ahead.** If I ask something mid-task, answer it;
   it doesn't approve or withdraw anything.
 - **No reply buttons, ever.** When the app offers an end-of-turn summary
@@ -82,15 +94,9 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
   tree (Gradle keeps running otherwise).
 - **Builds run at low priority** so the PC doesn't lag: through
   `~/.claude/skills/low-priority-build/` (below-normal priority, 4 Gradle
-  workers, no daemon), in the background. Two in parallel is fine. Copy each
-  output under a name that says its branch/feature before sending it.
-- **"Build it so I can see it" means implement it and make it reachable on
-  my phone** (a Dev tools / debug-menu entry for anything hard to reach),
-  not run the app for me. I preview UI and motion on the device myself; tell
-  me what to look at and which constants to tune.
-- **Verify with the analyzer in the terminal** (`dart analyze`) plus a
-  careful read of the diff. Don't use an MCP analyze tool (it hangs); skip it
-  if it doesn't finish in reasonable time. Format only the files you edited.
+  workers, no daemon), in the background. Two in parallel is fine on a large
+  machine; the skill's size note says when to cap them. Copy each output
+  under a name that says its branch/feature before sending it.
 - **No unprompted reviews.** Don't run reviewer agents before handing off —
   only when I ask.
 - **Tests:**
@@ -131,54 +137,28 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
 - **Match the surrounding code**: its naming, comment density and idiom.
 - **Every TODO / FIXME you add is tagged `TODO(vuntm): …`.** `TODO(human)`
   is for steps that need a person (a device, a console).
-- **User-facing text is localized in the same change** — every locale file.
-  Hard-coded copy is unfinished work.
-- **Shared widgets get generic names** matching their scope; when a second
-  consumer appears, rename the class *and* the file.
-- **Name contracts generically, implementations after their source**
-  (`VideoSdk` → `ByteplusSdkWrapper`, `*Dto`). Layering is by folder:
-  `domain/` (what the app is, grouped by concept) vs `data/` (one folder per
-  outside source); dependencies point inward.
 
-## UI and design
+## Design
 
-- **User-facing controls need extra care** (close buttons, CTAs, back
-  navigation): trace every code path. A guard flag read by both a handler
-  and `PopScope` can self-cancel (`maybePop()` goes through the pop scope;
-  `pop()` doesn't).
-- **For visual glitches (flashes, flicker), offer a blanket fix early** —
-  one that covers the likely causes — rather than a long root-cause hunt. Go
-  deeper only if it doesn't work.
-- **From Figma take colours, text styles and measurements only.** Layer
-  order, what a dim covers, and behaviour stay as built unless I ask.
-  Propose a Figma-vs-built table first; change shared components only on a
-  go-ahead. A Figma token lives in a gitignored file and is never echoed.
-- **One value app-wide, no per-screen overrides** unless I ask (e.g. empty /
-  error blocks sit ~40% down the page in every screen).
-- **Interaction choices are mine** — e.g. ask whether long press should start
-  select mode on any new select-mode UI before wiring it.
-- Motion: skip it under the OS reduce-motion setting; timing lives in one
-  motion-constants file; use the shared animation widgets, don't hand-roll.
-- Theme tokens for colours and text styles (one token per meaning, even if
-  two hexes match); SVG assets over icon fonts unless asked.
-
-## Backends and contracts
-
-- **The live server is the truth**, not the spec file or a local snapshot of
-  the backend. Probe it cheaply before claiming something is unbuilt (a
-  route that exists answers `401` without a token, one that doesn't `404`)
-  and say which source a claim was checked against.
-- **Backend code I don't own is read-only.** Every backend want decided in
-  chat goes into the API contract (the OpenAPI yaml) *in the same change*,
-  as the requirement itself — the rule, the shape, the limit, the why — and
-  bumps `info.version`. The yaml is the message to the backend dev: no
-  separate note to paste.
-- **The contract is evergreen**: it says what the app wants, never what the
-  backend has built — no "not built yet", "checked on <date>", status
-  sections. Removing stale ones is fine.
-- **The app is in production**: every backend ask must be additive and
-  invisible to builds already on phones.
-- Pagination is one page at a time; never loop through every page.
+- **New and changed code follows SOLID and clean code:**
+  - One reason to change per class and function; split one whose name
+    needs an "and".
+  - Depend on contracts where things vary (data sources, SDKs, the
+    platform), not on concrete classes. No interface for a class with one
+    implementation and no test that needs to swap it.
+  - Extend with new types or parameters, not branches on a type flag.
+  - Names say what a thing is for; small functions; early returns over
+    nesting; named constants, no magic numbers; comments say why, not what;
+    no dead or commented-out code.
+  - Extract duplication on the third copy, not the second.
+- **Scope is the code the change touches.** Untouched code that breaks
+  these goes in the proposal as a separate follow-up, never into the same
+  change. Where they clash with the code around it, match that code and say
+  so.
+- **Folder structure is the project's call** (feature-first, layer-first or
+  other): follow its `CLAUDE.md`, or the existing tree.
+- **Name the principle in "How I'll apply it"** when it shaped the design
+  (e.g. a new contract so the player doesn't depend on the disk cache).
 
 ## Memory and docs
 
