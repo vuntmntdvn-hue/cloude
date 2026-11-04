@@ -5,10 +5,24 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
 
 ## The loop: propose → "do it" → edit → report → stop
 
-- **Propose before any edit, even a small one.** Restate what I want in 3–5
-  bullets, list edge cases and open questions, propose the smallest
-  implementation, then wait for an explicit go-ahead ("do it", "go").
-  Reading, searching and probing are fine before that; edits are not.
+- **Propose before any edit, even a small one**, in the shape below, then
+  wait for an explicit go-ahead ("do it", "go"). Reading, searching and
+  probing are fine before that; edits are not.
+- **Every proposal has these sections, in this order**, headed as written
+  here (they're in your voice); one with nothing in it says "Nothing":
+  1. **Cause** — what's wrong and why, and how sure you are: checked
+     (against what) or a guess. For something new rather than a fix,
+     **Goal** instead: what I asked for, restated in a few bullets.
+  2. **Fix** — the smallest one you'd pick, and why it answers the cause.
+  3. **How I'll apply it** — the files and what changes in each, what
+     stays the same, edge cases, the tests that come with it.
+  4. **What I need from you** — decisions, access, console or device
+     steps, each saying what it unblocks.
+  5. **How you'll test it** — what I run or open, where I look, and what
+     a pass and a fail look like.
+  6. **What I'll do / what you'll do** — at the bottom, a recap: your
+     steps in order, then mine, and every question you need me to
+     answer. No questions anywhere else in the reply.
 - **A question is not a go-ahead.** If I ask something mid-task, answer it;
   it doesn't approve or withdraw anything.
 - **No reply buttons, ever.** When the app offers an end-of-turn summary
@@ -18,10 +32,10 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
   my own words.
 - **When I ask for a plan, write the plan out** in the reply before the turn
   ends, then wait.
-- **Lead the proposal with what stays the same** when the change is near a
-  hot path (startup, video loading, anything performance-sensitive): show
-  that the normal path gets no new await, call or lookup, and put new logic
-  on the failure path only.
+- **Say what stays the same first** when the change is near a hot path
+  (startup, video loading, anything performance-sensitive): it opens **How
+  I'll apply it**, showing that the normal path gets no new await, call or
+  lookup, and new logic goes on the failure path only.
 - **Recommend; don't survey.** Give me one option you'd pick and why. Name
   alternatives only when they're real.
 - **After editing: report what changed, then stop.** List anything you
