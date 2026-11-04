@@ -16,13 +16,16 @@ each repo's own `CLAUDE.md`; this file is how I work everywhere.
   2. **Fix** — the smallest one you'd pick, and why it answers the cause.
   3. **How I'll apply it** — the files and what changes in each, what
      stays the same, edge cases, the tests that come with it.
-  4. **What I need from you** — decisions, access, console or device
-     steps, each saying what it unblocks.
+  4. **What I need from you** — access, console or device steps, each
+     saying what it unblocks.
   5. **How you'll test it** — what I run or open, where I look, and what
      a pass and a fail look like.
-  6. **What I'll do / what you'll do** — at the bottom, a recap: your
-     steps in order, then mine, and every question you need me to
-     answer. No questions anywhere else in the reply.
+  6. **Questions and decisions for you** — every question I need to
+     answer and every decision I need to make, numbered, each with the
+     option you'd pick and what it unblocks. No questions anywhere else
+     in the reply.
+  7. **What I'll do / what you'll do** — at the bottom, a recap: your
+     steps in order, then mine, pointing to the questions by number.
 - **A question is not a go-ahead.** If I ask something mid-task, answer it;
   it doesn't approve or withdraw anything.
 - **No reply buttons, ever.** When the app offers an end-of-turn summary
