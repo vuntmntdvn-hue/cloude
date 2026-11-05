@@ -28,7 +28,11 @@ Rules for one kind of work, in `rules/` next to this file and linked into
   - **Test** — what I run or open, and what a pass and a fail look like.
   - **Need from you** — access, console or device steps, each with what it
     unblocks.
-- **Nothing to decide → keep it short:** a sentence or two per part.
+- **Show the code.** When the cause or fix is in code, quote it: the lines
+  at fault under **Cause**, the change as a short diff under **Fix**, each
+  with its `file:line`. Only the lines that matter, not whole functions.
+- **Nothing to decide → keep it short:** a sentence or two per part, plus
+  its snippet.
 - **End with one line** saying what starts the work: "do it", or answers
   to 1–3.
 - **Answering every numbered question is a go-ahead** when each answer picks
