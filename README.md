@@ -163,7 +163,7 @@ and one `"matcher": "PowerShell"` entry.
   language server and MCP server `spare`, and ends with
   `dry run: killed nothing` (or `nothing to kill`).
 - **CLAUDE.md.** In a new session, ask Claude to change some code. It should
-  answer with a proposal in the headed sections `CLAUDE.md` lists and wait
+  answer with a proposal in the per-problem blocks `CLAUDE.md` lists and wait
   for "do it" before editing. `ls -l ~/.claude/CLAUDE.md` shows the link
   into this folder (Windows: a plain file).
 - **Flutter rules.** In a Flutter project, have Claude read a `.dart` file,

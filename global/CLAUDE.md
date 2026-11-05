@@ -12,32 +12,28 @@ Rules for one kind of work, in `rules/` next to this file and linked into
 
 ## The loop: propose → "do it" → edit → report → stop
 
-- **Propose before any edit, even a small one**, in the shape below, then
-  wait for an explicit go-ahead ("do it", "go"). Reading, searching and
-  probing are fine before that; edits are not.
+- **Propose before any edit, even a small one**, then wait for an explicit
+  go-ahead ("do it", "go"). Reading, searching and probing are fine before
+  that; edits are not.
+- **One block per problem** (or per goal), headed by its name, so each
+  problem reads top to bottom on its own. A block has only the parts it
+  needs, in this order; leave out the empty ones:
+  - **Cause** — what's wrong and why, and how sure you are: checked
+    (against what) or a guess. For new work, **Goal**: what I asked for.
+  - **Fix** — the smallest one you'd pick and why it answers the cause:
+    the files and what changes in each, what stays the same, edge cases,
+    the tests that come with it. Questions the fix hangs on go right here,
+    each with the option you'd pick, numbered across the whole reply
+    (1, 2, 3 …).
+  - **Test** — what I run or open, and what a pass and a fail look like.
+  - **Need from you** — access, console or device steps, each with what it
+    unblocks.
+- **Nothing to decide → keep it short:** a sentence or two per part.
+- **End with one line** saying what starts the work: "do it", or answers
+  to 1–3.
 - **Answering every numbered question is a go-ahead** when each answer picks
   an option the proposal offered. An answer outside them, or a new request
   added to the answers, means restate the plan and wait.
-- **Every proposal has these sections, in this order**, headed as written
-  here (they're in your voice); one with nothing in it says "Nothing":
-  1. **Cause** — what's wrong and why, and how sure you are: checked
-     (against what) or a guess. For something new rather than a fix,
-     **Goal** instead: what I asked for, restated in a few bullets.
-  2. **Fix** — the smallest one you'd pick, and why it answers the cause.
-  3. **How I'll apply it** — the files and what changes in each, what
-     stays the same, edge cases, the tests that come with it.
-  4. **What I need from you** — access, console or device steps, each
-     saying what it unblocks.
-  5. **How you'll test it** — what I run or open, where I look, and what
-     a pass and a fail look like.
-  6. **Questions and decisions for you** — every question I need to
-     answer and every decision I need to make, numbered, each with the
-     option you'd pick and what it unblocks. No questions anywhere else
-     in the reply.
-  7. **What I'll do / what you'll do** — at the bottom, a recap: your
-     steps in order, then mine, pointing to the questions by number.
-- **A one-file change with no open questions gets the short form:**
-  **Goal** (or **Cause**) and **Fix**, a sentence each, then wait.
 - **A question is not a go-ahead.** If I ask something mid-task, answer it;
   it doesn't approve or withdraw anything.
 - **No reply buttons, ever.** When the app offers an end-of-turn summary
@@ -48,9 +44,9 @@ Rules for one kind of work, in `rules/` next to this file and linked into
 - **When I ask for a plan, write the plan out** in the reply before the turn
   ends, then wait.
 - **Say what stays the same first** when the change is near a hot path
-  (startup, video loading, anything performance-sensitive): it opens **How
-  I'll apply it**, showing that the normal path gets no new await, call or
-  lookup, and new logic goes on the failure path only.
+  (startup, video loading, anything performance-sensitive): it opens the
+  **Fix**, showing that the normal path gets no new await, call or lookup,
+  and new logic goes on the failure path only.
 - **Recommend; don't survey.** Give me one option you'd pick and why. Name
   alternatives only when they're real.
 - **After editing: report what changed, then stop.** List anything you
@@ -115,10 +111,10 @@ Rules for one kind of work, in `rules/` next to this file and linked into
 
 ## Subagents and workflows
 
-- **Ask which model before every subagent**, suggest one with a one-line
-  reason, then pass it as `model`. One question can cover several agents
-  launched together. Audits, gap analysis and probing a live API → haiku;
-  verify their high-severity findings yourself before reporting.
+- **Pick each subagent's model yourself** and pass it as `model`, naming it
+  with a one-line reason as you launch. Audits, gap analysis and probing a
+  live API → haiku; verify their high-severity findings yourself before
+  reporting.
 - **Simple audits: answer directly.** No multi-agent workflow for a small
   task — too slow.
 - **Every editing prompt to an agent quotes my go-ahead verbatim**, with
@@ -157,7 +153,7 @@ Rules for one kind of work, in `rules/` next to this file and linked into
   so.
 - **Folder structure is the project's call** (feature-first, layer-first or
   other): follow its `CLAUDE.md`, or the existing tree.
-- **Name the principle in "How I'll apply it"** when it shaped the design
+- **Name the principle in the Fix** when it shaped the design
   (e.g. a new contract so the player doesn't depend on the disk cache).
 
 ## Memory and docs
