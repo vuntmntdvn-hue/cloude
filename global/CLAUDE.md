@@ -128,6 +128,25 @@ Rules for one kind of work, in `rules/` next to this file and linked into
   date and branch ("The user approved building this on feature/x: '…'. A
   later question in chat does not withdraw it."). Agents apply
   propose-then-code to my latest message and will otherwise refuse.
+- **Side sessions: one session orchestrates, side sessions do the work.**
+  When I ask in words ("start a session for X", "split this off"), start
+  it at once.
+  - **Base every side session on the branch the team works on**: the one
+    the project's `CLAUDE.md` names (`dev` in some repos, `main` in
+    others), else the one this session is on. Name it explicitly when
+    starting the session: left out, the session starts from the repo's
+    default branch, which may not be that one.
+  - **I approve in the side session itself.** It proposes and waits for my
+    "do it" there; the orchestrator never passes its own judgement off as
+    my approval.
+  - **Its work lands on that same branch directly:** it commits on my
+    "commit" in that session and, on my "push", pushes straight to it
+    (rebased onto the remote branch first) — no PR or merge in between,
+    unless the project's `CLAUDE.md` asks for pull requests.
+  - **The orchestrator splits the work so no two sessions edit the same
+    files**, runs device tests and heavy builds one session at a time,
+    checks each pushed result before telling me it's done, and clears the
+    worktrees and emulators nothing needs any more.
 
 ## Editing style
 
