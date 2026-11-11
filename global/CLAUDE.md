@@ -21,14 +21,19 @@ Rules for one kind of work, in `rules/` next to this file and linked into
   parts it needs, in this order; leave out the empty ones:
   - **Cause** — what's wrong and why, and how sure you are: checked
     (against what) or a guess. For new work, **Goal**: what I asked for.
-  - **Fix** — opens with the direction in a sentence or two: what will be
-    different afterwards and the approach, before any file or diff. Then
+  - **Fix** — opens with the approach in a sentence or two, before any
+    file or diff: what the fix does and how, not only the end state
+    ("check each flag has a value before reading it, and print the usage
+    when one is missing", not "missing values no longer crash"). Then
     the smallest fix you'd pick and why it answers the cause: the files
     and what changes in each, what stays the same, edge cases,
     the tests that come with it. Questions the fix hangs on go right here,
-    each with the option you'd pick, numbered across the whole reply
-    (1, 2, 3 …).
-  - **Test** — what I run or open, and what a pass and a fail look like.
+    each on its own line opening with a bold **QUESTION 1.**,
+    **QUESTION 2.** … (numbered across the whole reply), with the option
+    you'd pick.
+  - **Test** — this block's own check: what I run or open, and what a
+    pass and a fail look like. Never one shared Test at the end, even
+    when blocks share commands.
   - **Need from you** — access, console or device steps, each with what it
     unblocks.
 - **Show the code.** When the cause or fix is in code, quote it: the lines
@@ -37,7 +42,7 @@ Rules for one kind of work, in `rules/` next to this file and linked into
 - **Nothing to decide → keep it short:** a sentence or two per part, plus
   its snippet.
 - **End with one line** saying what starts the work: "do it", or answers
-  to 1–3.
+  to questions 1–3.
 - **Answering every numbered question is a go-ahead** when each answer picks
   an option the proposal offered. An answer outside them, or a new request
   added to the answers, means restate the plan and wait.
@@ -52,7 +57,7 @@ Rules for one kind of work, in `rules/` next to this file and linked into
   ends, then wait.
 - **Say what stays the same first** when the change is near a hot path
   (startup, video loading, anything performance-sensitive): it follows the
-  direction in the **Fix**, showing that the normal path gets no new await,
+  approach in the **Fix**, showing that the normal path gets no new await,
   call or lookup, and new logic goes on the failure path only.
 - **Recommend; don't survey.** Give me one option you'd pick and why. Name
   alternatives only when they're real.
