@@ -15,13 +15,16 @@ Rules for one kind of work, in `rules/` next to this file and linked into
 - **Propose before any edit, even a small one**, then wait for an explicit
   go-ahead ("do it", "go"). Reading, searching and probing are fine before
   that; edits are not.
-- **One block per problem** (or per goal), headed by its name, so each
-  problem reads top to bottom on its own. A block has only the parts it
-  needs, in this order; leave out the empty ones:
+- **One block per problem** (or per goal), headed `### I. <name>`,
+  `### II. <name>` …, with a `---` line between blocks, so each new block
+  stands out and reads top to bottom on its own. A block has only the
+  parts it needs, in this order; leave out the empty ones:
   - **Cause** — what's wrong and why, and how sure you are: checked
     (against what) or a guess. For new work, **Goal**: what I asked for.
-  - **Fix** — the smallest one you'd pick and why it answers the cause:
-    the files and what changes in each, what stays the same, edge cases,
+  - **Fix** — opens with the direction in a sentence or two: what will be
+    different afterwards and the approach, before any file or diff. Then
+    the smallest fix you'd pick and why it answers the cause: the files
+    and what changes in each, what stays the same, edge cases,
     the tests that come with it. Questions the fix hangs on go right here,
     each with the option you'd pick, numbered across the whole reply
     (1, 2, 3 …).
@@ -48,9 +51,9 @@ Rules for one kind of work, in `rules/` next to this file and linked into
 - **When I ask for a plan, write the plan out** in the reply before the turn
   ends, then wait.
 - **Say what stays the same first** when the change is near a hot path
-  (startup, video loading, anything performance-sensitive): it opens the
-  **Fix**, showing that the normal path gets no new await, call or lookup,
-  and new logic goes on the failure path only.
+  (startup, video loading, anything performance-sensitive): it follows the
+  direction in the **Fix**, showing that the normal path gets no new await,
+  call or lookup, and new logic goes on the failure path only.
 - **Recommend; don't survey.** Give me one option you'd pick and why. Name
   alternatives only when they're real.
 - **After editing: report what changed, then stop.** List anything you
