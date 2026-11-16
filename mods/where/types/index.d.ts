@@ -40,6 +40,8 @@ export type GitStatus = { branch: GitBranch; files: ChangedFile[] }
 /** What the panel draws: the session's folder and, inside a repository, its status. */
 export type Where = {
   cwd: string
+  /** The working tree's root, absolute; null outside a git repository. */
+  root: string | null
   /** The main checkout's folder when `cwd` is in a linked worktree; null otherwise. */
   worktreeOf: string | null
   /** Null outside a git repository. */
@@ -160,6 +162,8 @@ declare module 'claude-code' {
       folds: Folds
       /** When Compact was first pressed and waits for the second; null when it does not. */
       compactArmedAt: number | null
+      /** Whether the band above the chat box (`where-mini`) is drawn. */
+      isMiniShown: boolean
     }
   }
 }

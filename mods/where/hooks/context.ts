@@ -20,7 +20,7 @@ export type ContextUsage = {
 }
 
 /** A run of the bar: `cells` squares in one part's color. */
-export type BarRun = { cells: number; color: string; kind: ContextPart['kind'] }
+export type BarRun = { cells: number; name: string; color: string; kind: ContextPart['kind'] }
 
 /**
  * The context as the meter shows it. A reading without a breakdown (the free
@@ -90,7 +90,7 @@ export function contextBar(parts: readonly ContextPart[], cells: number): BarRun
   }
 
   return shown
-    .map((part, index) => ({ cells: counts[index] ?? 0, color: part.color, kind: part.kind }))
+    .map((part, index) => ({ cells: counts[index] ?? 0, name: part.name, color: part.color, kind: part.kind }))
     .filter(run => run.cells > 0)
 }
 

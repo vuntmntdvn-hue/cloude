@@ -6,7 +6,7 @@ import { contextBar, contextLegend } from './context'
 import type { BarRun } from './context'
 import { money, percent, tokenCount } from './copy'
 import { laneStyle, OP_COLOR, TONE_COLOR } from './palette'
-import type { PanelChanges, PanelData, PanelRow } from './panel-data'
+import type { PanelChanges, PanelData, PanelFiles, PanelRow } from './panel-data'
 import { GROUP_NAME, GROUP_ORDER, GROUP_TONE, linesLabel } from './view'
 
 /** A run of text in one style. Colors are theme keys, so they follow light and dark mode. */
@@ -64,21 +64,19 @@ function whereBox(data: PanelData, frame: number, width: number): FrameLine[] {
 
   if (data.error !== null) lines.push(row(width, [{ text: data.error, color: 'error' }]))
   if (data.branch === null) return lines
-  if (data.changes === null) {
-    return [...lines, row(width, [{ text: '✓ ', color: 'success' }, plain('nothing to commit')])]
-  }
 
-  return [...lines, ...changeLines(data.changes, data.activity, data.folds.files, frame, width)]
+  const summary =
+    data.changes === null
+      ? [row(width, [{ text: '✓ ', color: 'success' }, plain('nothing to commit')])]
+      : changeLines(data.changes, width)
+
+  if (data.folds.files) return [...lines, ...summary]
+
+  return [...lines, ...summary, ...fileLines(data.files, data.activity, frame, width)]
 }
 
-/** The group counts and the totals bar; then, unless folded, the files by folder. */
-function changeLines(
-  changes: PanelChanges,
-  activity: Activity | null,
-  isFolded: boolean,
-  frame: number,
-  width: number,
-): FrameLine[] {
+/** The group counts and the totals bar. */
+function changeLines(changes: PanelChanges, width: number): FrameLine[] {
   const counts = GROUP_ORDER.filter(group => group !== 'conflicted' || changes.counts.conflicted > 0)
     .flatMap(group => [
       { text: '● ', color: TONE_COLOR[GROUP_TONE[group]] },
@@ -88,9 +86,15 @@ function changeLines(
   const { added, deleted } = changes.totals
 
   if (added + deleted > 0) lines.push(row(width, totalsBar(changes.totals, width)))
-  if (isFolded) return lines
 
-  for (const { folder, rows } of changes.tree) {
+  return lines
+}
+
+/** The files by folder, files in use among them. */
+function fileLines(files: PanelFiles, activity: Activity | null, frame: number, width: number): FrameLine[] {
+  const lines: FrameLine[] = []
+
+  for (const { folder, rows } of files.tree) {
     lines.push(row(width, [dim(folder)]))
 
     for (const file of rows) {
@@ -98,7 +102,7 @@ function changeLines(
     }
   }
 
-  if (changes.hiddenRows > 0) lines.push(row(width, [dim(`+${changes.hiddenRows} more`)]))
+  if (files.hiddenRows > 0) lines.push(row(width, [dim(`+${files.hiddenRows} more`)]))
 
   return lines
 }
@@ -117,11 +121,15 @@ function totalsBar(totals: LineCounts, width: number): Segment[] {
   ]
 }
 
+/** A dot per state, or a hollow one for an unchanged file in use; the name; the agent's marker. */
 function fileLeft(file: PanelRow, activity: Activity | null, frame: number): Segment[] {
-  const dots = file.groups.map(group => ({ text: '●', color: TONE_COLOR[GROUP_TONE[group]] }))
+  const dots: Segment[] = file.isInUse
+    ? [dim('○')]
+    : file.groups.map(group => ({ text: '●', color: TONE_COLOR[GROUP_TONE[group]] }))
   const name: Segment = {
     text: file.name,
     ...(file.isDeleted ? { isDim: true, isStruck: true } : {}),
+    ...(file.isInUse ? { isDim: true } : {}),
     ...(file.isNew ? { isItalic: true } : {}),
   }
 

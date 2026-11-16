@@ -17,7 +17,7 @@ const NONE: ReadonlyMap<string, FileLines> = new Map()
  */
 export async function readWhere($: EngineInterface): Promise<Where> {
   const cwd = await $.session.cwd()
-  const outside: Where = { cwd, worktreeOf: null, git: null, error: null }
+  const outside: Where = { cwd, root: null, worktreeOf: null, git: null, error: null }
 
   try {
     const top = await git($, cwd, [
@@ -40,10 +40,12 @@ export async function readWhere($: EngineInterface): Promise<Where> {
     }
 
     const parsed = parseStatus(status.stdout)
-    const files = await withCounts($, cwd, rootOf(top.stdout), parsed.files)
+    const root = rootOf(top.stdout)
+    const files = await withCounts($, cwd, root, parsed.files)
 
     return {
       cwd,
+      root,
       worktreeOf: parseWorktreeOf(top.stdout),
       git: { ...parsed, files },
       error: null,

@@ -39,6 +39,11 @@ export function did(op: OpKind, target: string): string {
   return target === '' ? DID[op] : `${DID[op]} ${target}`
 }
 
+/** What an agent is doing to a file, one word for its chip: `reading`, `editing`. */
+export function onFile(op: OpKind): string {
+  return op === 'READ' ? 'reading' : op === 'EDIT' ? 'editing' : 'working'
+}
+
 /** `Claude` for the main loop, `Subagent α` for the rest. */
 export function agentName(label: string): string {
   return label === MAIN_LABEL ? 'Claude' : `Subagent ${label}`

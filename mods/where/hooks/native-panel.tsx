@@ -1,88 +1,96 @@
-import type { Elements, RenderSurface } from 'claude-code'
+import type { Elements, RenderChildren, RenderSurface } from 'claude-code'
 
-import type { Activity, ContextReading, Lane, LineCounts, LogEntry, TokenCounts } from '../types'
+import type { Activity, ContextReading, FileGroup, Lane, LineCounts, LogEntry, TokenCounts } from '../types'
 import { freshTokens } from './activity'
 import { contextBar, contextLegend } from './context'
-import type { BarRun } from './context'
-import { agentName, ago, did, doing, money, percent, timeOfDay, tokenCount } from './copy'
-import { avatar, BRANCH_ICON, CHECK_ICON, FOLDER_ICON, pulseDot, ratioBar, SPINNER_ICON } from './icons'
-import { laneStyle, TONE_COLOR, TONE_TINT } from './palette'
-import type { PanelChanges, PanelData, PanelRow } from './panel-data'
-import { GROUP_NAME, GROUP_ORDER, GROUP_TONE, linesLabel } from './view'
-import type { Tag } from './view'
 import type { FoldSection, PanelControls } from './controls'
+import { agentName, ago, did, doing, money, onFile, timeOfDay, tokenCount } from './copy'
+import {
+  avatar,
+  BRANCH_ICON,
+  CHECK_ICON,
+  chip,
+  dot,
+  FOLDER_ICON,
+  HAIRLINE_RULE,
+  ring,
+  segmentedBar,
+  SPINNER_ICON,
+  stateBar,
+} from './icons'
+import { categoryColor, laneStyle, TONE_COLOR, TONE_FILL, TONE_TINT } from './palette'
+import type { PanelData, PanelRow } from './panel-data'
+import { GROUP_ORDER, GROUP_TONE, linesLabel } from './view'
+import type { Tag } from './view'
 
 type Ui = Elements[RenderSurface]
-
-// Keys that press the buttons while the panel has the focus.
-const COMPACT_KEY = 'c'
-const FOLD_KEYS: Readonly<Record<FoldSection, string>> = { files: 'f', activity: 'a' }
 
 const RECENT_ROWS = 4
 // The context bar splits its width in this many shares, so every used part
 // keeps at least one; and how many parts its legend names.
-const BAR_SHARES = 100
-const LEGEND_PARTS = 4
-// Translucent greys for the window left and the compaction reserve, on light
-// and dark themes alike.
-const FREE_TINT = 'rgba(128, 128, 128, 0.16)'
-const BUFFER_TINT = 'rgba(128, 128, 128, 0.34)'
-// One caption line of height: what each bar segment holds.
-const NO_BREAK_SPACE = '\u00a0'
+const BAR_SHARES = 200
+const LEGEND_PARTS = 3
+
+// The big numbers' labels, as the design names them.
+const STAT_LABEL: Readonly<Record<FileGroup, string>> = {
+  conflicted: 'conflicts',
+  staged: 'staged',
+  changed: 'modified',
+  untracked: 'new',
+}
+
+// Translucent fills that sit on light and dark themes alike: a card's ground
+// and the folder's icon tile. A card's edge is its ground's own color: the
+// border gives the round corners and draws no outline.
+const CARD_TINT = 'rgba(128, 128, 128, 0.05)'
+const CARD_EDGE = CARD_TINT
+const TILE_TINT = 'rgba(128, 128, 128, 0.12)'
+// Claude's clay, for the context ring: a picture takes no theme key.
+const CLAY = '#D97757'
+
 const ICON_SIZE = 14
-const AVATAR_SIZE = 20
-const DOT_SIZE = 7
+const TILE_ICON_SIZE = 18
+const AVATAR_SIZE = 24
+const RING_SIZE = 64
+const LEGEND_DOT_SIZE = 8
+const STATE_BAR_SIZE = { width: 4, height: 16 }
 
 /**
- * The panel in the desktop app's own look: the folder and branch, the
- * changes by folder, then each agent's activity and the latest actions.
- * `now` is the clock, for the "2s ago" times.
+ * The panel in a modern desktop look: the workspace on top, then cards for
+ * the changes, the context and the activity. `now` is the clock, for the
+ * "1m" times.
  */
 export function drawNativePanel(ui: Ui, data: PanelData, now: number, controls: PanelControls) {
   const { Box, Text } = ui
 
   return (
     <Box flexDirection="column" gap="md">
-      {header(ui, data, controls)}
+      {workspace(ui, data)}
       {data.error !== null && (
         <Text size="caption" color="error">
           {data.error}
         </Text>
       )}
-      {data.branch !== null &&
-        (data.changes === null
-          ? cleanLine(ui)
-          : changes(ui, data.changes, data.activity, data.folds.files, controls))}
-      {data.context !== null && contextMeter(ui, data.context, controls)}
-      {data.activity !== null && activity(ui, data.activity, now, data.folds.activity, controls)}
+      {data.branch !== null && changesCard(ui, data, controls)}
+      {data.context !== null && contextCard(ui, data.context, controls)}
+      {data.activity !== null && activityCard(ui, data.activity, now, data.folds.activity, controls)}
     </Box>
   )
 }
 
-/** A quiet text button: secondary, drawn dim until the pointer or focus is on it. */
-function quietButton(ui: Ui, key: string, label: string, onPress: () => void, hotkey?: string) {
-  const { Button } = ui
-
-  return <Button key={key} label={label} dimColor plain onPress={onPress} {...(hotkey === undefined ? {} : { hotkey })} />
-}
-
-/** `Hide` or `Show` for a section; the section's heading row stays either way. */
-function foldButton(ui: Ui, section: FoldSection, isFolded: boolean, controls: PanelControls) {
-  return quietButton(ui, `fold-${section}`, isFolded ? 'Show' : 'Hide', () => controls.onFold(section), FOLD_KEYS[section])
-}
-
-function header(ui: Ui, data: PanelData, controls: PanelControls) {
+/** The folder in an icon tile with its path, and the branch over how it stands. */
+function workspace(ui: Ui, data: PanelData) {
   const { Box, Text } = ui
 
   return (
-    <Box flexDirection="row" justifyContent="space-between" gap="sm">
-      <Box flexDirection="column" flexShrink={1} minWidth={0}>
-        <Box flexDirection="row" alignItems="center" gap="xs">
-          {picture(ui, FOLDER_ICON, 'Folder', ICON_SIZE + 2)}
-          <Text size="heading" weight="semibold" wrap="truncate-end">
-            {data.folder.name}
-          </Text>
-        </Box>
+    <Box flexDirection="row" alignItems="center" gap="sm">
+      <Box padding="xs" {...tint(ui, TILE_TINT)} {...rounded(ui)}>
+        {picture(ui, FOLDER_ICON, 'Folder', TILE_ICON_SIZE)}
+      </Box>
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text size="heading" weight="semibold" wrap="truncate-end">
+          {data.folder.name}
+        </Text>
         {data.folder.under !== '' && (
           <Text size="caption" dimColor wrap="truncate-start">
             {data.folder.under}
@@ -108,6 +116,65 @@ function header(ui: Ui, data: PanelData, controls: PanelControls) {
   )
 }
 
+/** A card: a faint ground with a soft round edge, its title row on top. */
+function card(ui: Ui, title: string, extras: RenderChildren[], body: RenderChildren[]) {
+  const { Box, Text } = ui
+
+  return (
+    <Box flexDirection="column" gap="md" paddingX="md" paddingY="md" {...tint(ui, CARD_TINT)} {...rounded(ui)}>
+      <Box flexDirection="row" alignItems="center" gap="sm">
+        <Text size="footnote" weight="semibold" dimColor>
+          {title}
+        </Text>
+        <Box flexGrow={1} />
+        {extras}
+      </Box>
+      {body}
+    </Box>
+  )
+}
+
+/** The counts as large numbers, the split strip, then the files by folder; folded, the title row alone. */
+function changesCard(ui: Ui, data: PanelData, controls: PanelControls) {
+  const { Box, Text } = ui
+  const isFolded = data.folds.files
+  const extras = [
+    data.changes === null ? null : lineCounts(ui, data.changes.totals),
+    foldButton(ui, 'files', isFolded, controls),
+  ]
+
+  if (isFolded) return card(ui, 'Changes', extras, [])
+
+  const added = data.changes?.totals.added ?? 0
+  const deleted = data.changes?.totals.deleted ?? 0
+
+  return card(ui, 'Changes', extras, [
+    data.changes === null ? cleanLine(ui) : stats(ui, data.changes.counts),
+    added + deleted > 0 &&
+      picture(
+        ui,
+        segmentedBar([
+          { share: added, fill: TONE_FILL.good },
+          { share: deleted, fill: TONE_FILL.danger },
+        ]),
+        `${added} lines added, ${deleted} removed`,
+      ),
+    ...data.files.tree.map(({ folder, rows }) => (
+      <Box flexDirection="column">
+        <Text size="caption" dimColor wrap="truncate-start">
+          {folder}
+        </Text>
+        {rows.map(row => fileRow(ui, row, data.activity))}
+      </Box>
+    )),
+    data.files.hiddenRows > 0 && (
+      <Text size="caption" dimColor>
+        {`+${data.files.hiddenRows} more`}
+      </Text>
+    ),
+  ])
+}
+
 function cleanLine(ui: Ui) {
   const { Box, Text } = ui
 
@@ -119,64 +186,50 @@ function cleanLine(ui: Ui) {
   )
 }
 
-/** The group pills and totals, then (unless folded) the split bar and the files under their folders. */
-function changes(
-  ui: Ui,
-  data: PanelChanges,
-  activity: Activity | null,
-  isFolded: boolean,
-  controls: PanelControls,
-) {
+/** A large number per group over its name: staged, modified, new, and conflicts when there are any. */
+function stats(ui: Ui, counts: Record<FileGroup, number>) {
   const { Box, Text } = ui
-  const groups = GROUP_ORDER.filter(group => group !== 'conflicted' || data.counts.conflicted > 0)
-  const { added, deleted } = data.totals
-  const summary = (
-    <Box flexDirection="row" alignItems="center" gap="xs">
-      {groups.map(group =>
-        pill(ui, { text: `${data.counts[group]} ${GROUP_NAME[group]}`, tone: GROUP_TONE[group] }),
-      )}
-      <Box flexGrow={1} />
-      {lineCounts(ui, data.totals)}
-      {foldButton(ui, 'files', isFolded, controls)}
-    </Box>
-  )
-
-  if (isFolded) return summary
+  const groups = GROUP_ORDER.filter(group => group !== 'conflicted' || counts.conflicted > 0)
 
   return (
-    <Box flexDirection="column" gap="sm">
-      {summary}
-      {added + deleted > 0 &&
-        picture(ui, ratioBar(added, deleted), `${added} lines added, ${deleted} removed`)}
-      {data.tree.map(({ folder, rows }) => (
-        <Box flexDirection="column">
-          <Text size="caption" dimColor wrap="truncate-start">
-            {folder}
+    <Box flexDirection="row" gap="sm">
+      {groups.map(group => (
+        <Box flexDirection="column" flexGrow={1} width={0}>
+          <Text
+            size="title"
+            weight="semibold"
+            tabular
+            {...(group === 'untracked' || counts[group] === 0 ? {} : { color: TONE_COLOR[GROUP_TONE[group]] })}
+          >
+            {String(counts[group])}
           </Text>
-          {rows.map(row => fileRow(ui, row, activity))}
+          <Text size="caption" dimColor wrap="truncate-end">
+            {STAT_LABEL[group]}
+          </Text>
         </Box>
       ))}
-      {data.hiddenRows > 0 && (
-        <Text size="caption" dimColor>
-          {`+${data.hiddenRows} more`}
-        </Text>
-      )}
     </Box>
   )
 }
 
+/** A slim bar per state (dashed and hollow for a file only in use), the name, the agent on it, the counts. */
 function fileRow(ui: Ui, row: PanelRow, activity: Activity | null) {
   const { Box, Text } = ui
 
   return (
-    <Box flexDirection="row" alignItems="center" gap="xs">
-      {row.groups.map(group => (
-        <Text size="caption" color={TONE_COLOR[GROUP_TONE[group]]}>
-          ●
-        </Text>
-      ))}
+    <Box flexDirection="row" alignItems="center" gap="sm">
+      {row.isInUse
+        ? picture(ui, stateBar(TONE_FILL.quiet, true), 'In use', STATE_BAR_SIZE)
+        : row.groups.map(group =>
+            picture(ui, stateBar(TONE_FILL[GROUP_TONE[group]], false), STAT_LABEL[group], STATE_BAR_SIZE),
+          )}
       <Box flexGrow={1} flexShrink={1} minWidth={0}>
-        <Text wrap="truncate-end" strikethrough={row.isDeleted} dimColor={row.isDeleted} italic={row.isNew}>
+        <Text
+          wrap="truncate-end"
+          strikethrough={row.isDeleted}
+          dimColor={row.isDeleted || row.isInUse}
+          italic={row.isNew}
+        >
           {row.name}
         </Text>
       </Box>
@@ -192,9 +245,9 @@ function fileRow(ui: Ui, row: PanelRow, activity: Activity | null) {
   )
 }
 
-/** A breathing chip naming the agent at work on this file right now. */
+/** A rounded, breathing pill naming the agent on this file and what it does: `Claude · editing`. */
 function agentChip(ui: Ui, row: PanelRow, activity: Activity | null) {
-  const { Box, Text } = ui
+  const { Text } = ui
   const index =
     activity?.lanes.findIndex(lane =>
       lane.running.some(call => call.filePath?.endsWith(`/${row.path}`) ?? false),
@@ -203,79 +256,80 @@ function agentChip(ui: Ui, row: PanelRow, activity: Activity | null) {
   if (activity === null || index < 0) return null
 
   const lane = activity.lanes[index] as Lane
+  const call = lane.running.find(one => one.filePath?.endsWith(`/${row.path}`) ?? false)
   const style = laneStyle(index)
+  const label = `${index === 0 ? 'Claude' : lane.label}${call === undefined ? '' : ` · ${onFile(call.op)}`}`
 
-  return (
-    <Box flexDirection="row" alignItems="center" gap="xs" paddingX="xs" {...tint(ui, style.tint)}>
-      {picture(ui, pulseDot(style.fill), 'At work', DOT_SIZE, true)}
+  if (!isGraphical(ui)) {
+    return (
       <Text size="caption" color={style.text}>
-        {index === 0 ? 'Claude' : lane.label}
+        {label}
       </Text>
-    </Box>
-  )
+    )
+  }
+
+  const pill = chip(label, style.fill, style.tint, style.fill)
+
+  return picture(ui, pill.source, label, pill, true)
 }
 
-/**
- * `Context  92k of 200k · 46%`, a bar split by what fills the window (in the
- * colors /context uses), the largest parts, and how far auto-compaction is.
- */
-function contextMeter(ui: Ui, reading: ContextReading, controls: PanelControls) {
+/** The ring and the amount, the strip split by what fills the window, the largest parts. */
+function contextCard(ui: Ui, reading: ContextReading, controls: PanelControls) {
   const { Box, Text } = ui
   const { tokens, window, percent: filled, parts, compactAt } = reading
-  const amount =
-    tokens === null
-      ? 'counting from the first response'
-      : `${tokenCount(tokens)} of ${tokenCount(window)}${filled === null ? '' : ` · ${percent(filled)}`}`
   const legend = contextLegend(parts, LEGEND_PARTS)
+  const left = compactAt === null || tokens === null ? null : Math.max(0, compactAt - tokens)
+  const runs = contextBar(parts, BAR_SHARES)
 
-  return (
-    <Box flexDirection="column" gap="xs">
-      <Box flexDirection="row" alignItems="center" gap="sm">
-        <Text size="footnote" weight="semibold" dimColor>
-          Context
+  return card(ui, 'Context', [compactButton(ui, controls)], [
+    <Box flexDirection="row" alignItems="center" gap="md">
+      {filled !== null && picture(ui, ring(filled, CLAY), `${Math.round(filled)}% of the context used`, RING_SIZE)}
+      <Box flexDirection="column" flexShrink={1} minWidth={0}>
+        {tokens === null ? (
+          <Text dimColor>Counting from the first response</Text>
+        ) : (
+          <Box flexDirection="row" alignItems="flex-end" gap="xs">
+            <Text size="heading" weight="semibold" tabular>
+              {tokenCount(tokens)}
+            </Text>
+            <Text dimColor>{`of ${tokenCount(window)}`}</Text>
+          </Box>
+        )}
+        <Text size="caption" dimColor wrap="truncate-end">
+          {left === null ? (compactAt === null ? 'Auto-compact is off' : '') : `${tokenCount(left)} until auto-compact`}
         </Text>
-        <Box flexGrow={1} flexShrink={1} minWidth={0} alignItems="flex-end">
-          <Text size="caption" dimColor tabular wrap="truncate-end">
-            {amount}
-          </Text>
-        </Box>
-        {compactButton(ui, controls)}
       </Box>
-      {parts.length > 0 && (
-        <Box flexDirection="row">
-          {contextBar(parts, BAR_SHARES).map(run => (
-            <Box width={0} flexGrow={run.cells} backgroundColor={segmentColor(run)}>
-              <Text size="caption">{NO_BREAK_SPACE}</Text>
-            </Box>
-          ))}
-        </Box>
-      )}
-      {legend.shown.length > 0 && (
-        <Box flexDirection="row" flexWrap="wrap" columnGap="sm">
-          {legend.shown.map(part => (
-            <Box flexDirection="row" gap="xs">
+    </Box>,
+    runs.length > 0 &&
+      picture(
+        ui,
+        segmentedBar(runs.map(run => ({ share: run.cells, fill: categoryColor(run.name, run.kind) }))),
+        'What fills the context window',
+      ),
+    legend.shown.length > 0 && (
+      <Box flexDirection="row" flexWrap="wrap" columnGap="md" rowGap="xs">
+        {legend.shown.map(part => (
+          <Box flexDirection="row" alignItems="center" gap="xs">
+            {isGraphical(ui) ? (
+              picture(ui, dot(categoryColor(part.name, part.kind)), part.name, LEGEND_DOT_SIZE)
+            ) : (
               <Text size="caption" color={part.color}>
                 ●
               </Text>
-              <Text size="caption" dimColor>
-                {`${part.name} ${tokenCount(part.tokens)}`}
-              </Text>
-            </Box>
-          ))}
-          {legend.more > 0 && (
+            )}
             <Text size="caption" dimColor>
-              {`+${legend.more} more`}
+              {`${part.name} ${tokenCount(part.tokens)}`}
             </Text>
-          )}
-        </Box>
-      )}
-      {compactAt !== null && tokens !== null && (
-        <Text size="caption" dimColor>
-          {`Compacts at ${tokenCount(compactAt)} · ${tokenCount(Math.max(0, compactAt - tokens))} to go`}
-        </Text>
-      )}
-    </Box>
-  )
+          </Box>
+        ))}
+        {legend.more > 0 && (
+          <Text size="caption" dimColor>
+            {`+${legend.more} more`}
+          </Text>
+        )}
+      </Box>
+    ),
+  ])
 }
 
 /** `Compact`, then for 5 seconds `Confirm compact`, drawn as the main action while it waits. */
@@ -283,90 +337,43 @@ function compactButton(ui: Ui, controls: PanelControls) {
   const { Button } = ui
 
   return controls.isCompactArmed ? (
-    <Button key="compact" label="Confirm compact" variant="primary" hotkey={COMPACT_KEY} onPress={controls.onCompact} />
+    <Button key="compact" label="Confirm compact" variant="primary" onPress={controls.onCompact} />
   ) : (
-    <Button key="compact" label="Compact" variant="secondary" hotkey={COMPACT_KEY} onPress={controls.onCompact} />
+    <Button key="compact" label="Compact" variant="secondary" onPress={controls.onCompact} />
   )
 }
 
-/** A used part fills with its own theme color; free space and the compaction reserve with greys. */
-function segmentColor(run: BarRun): string {
-  if (run.kind === 'used') return run.color
-
-  return run.kind === 'free' ? FREE_TINT : BUFFER_TINT
-}
-
-/** The agents and what each is doing, then the latest actions and the session's totals; folded, the heading alone. */
-function activity(ui: Ui, data: Activity, now: number, isFolded: boolean, controls: PanelControls) {
+/** The agents, a rule, the latest actions, a rule, one quiet line of totals; folded, the title row alone. */
+function activityCard(ui: Ui, data: Activity, now: number, isFolded: boolean, controls: PanelControls) {
   const { Box, Text } = ui
   const isWorking = data.lanes.some(lane => lane.running.length > 0)
   const status = isWorking ? 'Working' : data.isTurnActive ? 'Thinking' : 'Idle'
-  const recent = data.log.slice(-RECENT_ROWS).reverse()
-  const { reads, edits, calls } = data.counters
-  const heading = (
-    <Box flexDirection="row" alignItems="center" gap="sm">
-      <Text size="footnote" weight="semibold" dimColor>
-        Activity
-      </Text>
-      <Box flexGrow={1} flexShrink={1} minWidth={0} alignItems="flex-end">
-        <Text size="caption" dimColor wrap="truncate-end">
-          {`${status} · since ${timeOfDay(data.startedAt)}`}
-        </Text>
-      </Box>
-      {foldButton(ui, 'activity', isFolded, controls)}
-    </Box>
-  )
-
-  if (isFolded) return heading
-
-  return (
-    <Box flexDirection="column" gap="sm">
-      {heading}
-      {data.lanes.map((lane, index) =>
-        laneRow(ui, lane, index, data.isTurnActive, data.tokensByLabel[lane.label]),
-      )}
-      {recent.length > 0 && (
-        <Box flexDirection="column">
-          <Text size="footnote" weight="semibold" dimColor>
-            Recent
-          </Text>
-          {recent.map(entry => recentRow(ui, entry, now))}
-        </Box>
-      )}
-      <Box flexDirection="column">
-        <Box flexDirection="row" gap="xs">
-          <Text size="caption" dimColor>
-            {`${reads} reads · ${edits} edits · ${calls} tool calls`}
-          </Text>
-          {lineCounts(ui, data.counters)}
-        </Box>
-        {tokenLine(ui, data)}
-      </Box>
-    </Box>
-  )
-}
-
-/** `Tokens 182k in · 24k out · 1.2M cached · $1.24`; what is not reported is left out. */
-function tokenLine(ui: Ui, data: Activity) {
-  const { Text } = ui
-  const { input, output, cacheRead, cacheWrite } = data.tokens
-  const parts = [
-    ...(input + cacheWrite + output + cacheRead > 0
-      ? [`${tokenCount(input + cacheWrite)} in`, `${tokenCount(output)} out`, `${tokenCount(cacheRead)} cached`]
-      : []),
-    ...(data.meter?.usd == null ? [] : [money(data.meter.usd)]),
+  const extras = [
+    <Text size="caption" dimColor wrap="truncate-end">
+      {`${status} · since ${timeOfDay(data.startedAt)}`}
+    </Text>,
+    foldButton(ui, 'activity', isFolded, controls),
   ]
 
-  if (parts.length === 0) return null
+  if (isFolded) return card(ui, 'Activity', extras, [])
 
-  return (
-    <Text size="caption" dimColor wrap="truncate-end">
-      {`Tokens ${parts.join(' · ')}`}
-    </Text>
-  )
+  const recent = data.log.slice(-RECENT_ROWS).reverse()
+
+  return card(ui, 'Activity', extras, [
+    ...data.lanes.map((lane, index) => laneRow(ui, lane, index, data.isTurnActive, data.tokensByLabel[lane.label])),
+    recent.length > 0 && rule(ui),
+    recent.length > 0 && <Box flexDirection="column">{recent.map(entry => recentRow(ui, entry, now))}</Box>,
+    rule(ui),
+    totalsLine(ui, data),
+  ])
 }
 
-/** `Claude  Editing view.ts · 2 running  120k` with a spinner while it works. */
+/** A hairline across the card. */
+function rule(ui: Ui) {
+  return picture(ui, HAIRLINE_RULE, '')
+}
+
+/** An avatar, the agent's name over what it does, its tokens, a spinner while it works. */
 function laneRow(ui: Ui, lane: Lane, index: number, isTurnActive: boolean, tokens: TokenCounts | undefined) {
   const { Box, Text } = ui
   const call = lane.running[lane.running.length - 1]
@@ -378,8 +385,10 @@ function laneRow(ui: Ui, lane: Lane, index: number, isTurnActive: boolean, token
   return (
     <Box flexDirection="row" alignItems="center" gap="sm">
       {picture(ui, avatar(laneStyle(index).fill, index === 0 ? null : lane.label), agentName(lane.label), AVATAR_SIZE)}
-      <Text weight="semibold">{agentName(lane.label)}</Text>
-      <Box flexGrow={1} flexShrink={1} minWidth={0}>
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text weight="semibold" wrap="truncate-end">
+          {agentName(lane.label)}
+        </Text>
         <Text size="caption" dimColor wrap="truncate-end">
           {what}
         </Text>
@@ -394,7 +403,7 @@ function laneRow(ui: Ui, lane: Lane, index: number, isTurnActive: boolean, token
   )
 }
 
-/** `✓ Edited panel.tsx  +3 −1  2s`; a subagent's action names it, a refused one says so. */
+/** `✓ Edited panel.tsx  +3 −1  1m`; a subagent's action names it, a refused one says so. */
 function recentRow(ui: Ui, entry: LogEntry, now: number) {
   const { Box, Text } = ui
   const isRefused = entry.outcome.kind === 'denied' || entry.outcome.kind === 'failed'
@@ -411,6 +420,33 @@ function recentRow(ui: Ui, entry: LogEntry, now: number) {
       <Text size="caption" dimColor tabular>
         {ago(now - entry.at)}
       </Text>
+    </Box>
+  )
+}
+
+/** `4 reads · 26 edits · 56 calls` on the left, `44k in · 34k out · $29.62` on the right. */
+function totalsLine(ui: Ui, data: Activity) {
+  const { Box, Text } = ui
+  const { reads, edits, calls } = data.counters
+  const { input, output, cacheRead, cacheWrite } = data.tokens
+  const tokens = [
+    ...(input + cacheWrite + output + cacheRead > 0
+      ? [`${tokenCount(input + cacheWrite)} in`, `${tokenCount(output)} out`]
+      : []),
+    ...(data.meter?.usd == null ? [] : [money(data.meter.usd)]),
+  ]
+
+  return (
+    <Box flexDirection="row" flexWrap="wrap" columnGap="md">
+      <Text size="caption" dimColor>
+        {`${reads} reads · ${edits} edits · ${calls} calls`}
+      </Text>
+      <Box flexGrow={1} />
+      {tokens.length > 0 && (
+        <Text size="caption" dimColor>
+          {tokens.join(' · ')}
+        </Text>
+      )}
     </Box>
   )
 }
@@ -436,17 +472,30 @@ function lineCounts(ui: Ui, lines: LineCounts) {
   )
 }
 
-/** A tinted pill with its label in the tone's color. */
-function pill(ui: Ui, { text, tone }: Tag) {
-  const { Box, Text } = ui
+/** `Hide` or `Show` for a card, as quiet text: dim until the pointer or focus is on it. */
+function foldButton(ui: Ui, section: FoldSection, isFolded: boolean, controls: PanelControls) {
+  const { Button } = ui
 
   return (
-    <Box paddingX="xs" {...tint(ui, TONE_TINT[tone])}>
+    <Button key={`fold-${section}`} label={isFolded ? 'Show' : 'Hide'} dimColor plain onPress={() => controls.onFold(section)} />
+  )
+}
+
+/** A rounded pill in the tone's colors; where pictures are not drawn, the label in the tone's color. */
+function pill(ui: Ui, { text, tone }: Tag) {
+  const { Text } = ui
+
+  if (!isGraphical(ui)) {
+    return (
       <Text size="caption" color={TONE_COLOR[tone]}>
         {text}
       </Text>
-    </Box>
-  )
+    )
+  }
+
+  const shape = chip(text, TONE_FILL[tone], TONE_TINT[tone])
+
+  return picture(ui, shape.source, text, shape)
 }
 
 /** A background tint where the surface draws one; the terminal goes without. */
@@ -455,20 +504,35 @@ function tint(ui: Ui, color: string): { backgroundColor?: string } {
 }
 
 /**
- * A picture where the surface draws Svg; the terminal goes without. Without a
- * size it fills the width. An animated one is drawn interactive, where SMIL runs.
+ * A soft round edge, for cards and the icon tile only: on small things the
+ * border adds height. The terminal would draw it as lines, so it goes without.
  */
-function picture(ui: Ui, source: string, alt: string, size?: number, isAnimated = false) {
+function rounded(ui: Ui): { borderStyle?: string; borderColor?: string } {
+  return isGraphical(ui) ? { borderStyle: 'round', borderColor: CARD_EDGE } : {}
+}
+
+/**
+ * A picture where the surface draws Svg; the terminal goes without. Sized by
+ * a number (a square) or a width and height; unsized, it fills the width. An
+ * animated one is drawn interactive, where SMIL runs.
+ */
+function picture(
+  ui: Ui,
+  source: string,
+  alt: string,
+  size?: number | { width: number; height: number },
+  isAnimated = false,
+) {
   if (!isGraphical(ui)) return null
 
   const { Svg } = ui
   const animated = isAnimated ? { isInteractive: true } : {}
 
-  return size === undefined ? (
-    <Svg source={source} alt={alt} {...animated} />
-  ) : (
-    <Svg source={source} alt={alt} width={size} height={size} {...animated} />
-  )
+  if (size === undefined) return <Svg source={source} alt={alt} {...animated} />
+
+  const { width, height } = typeof size === 'number' ? { width: size, height: size } : size
+
+  return <Svg source={source} alt={alt} width={width} height={height} {...animated} />
 }
 
 /** Whether the surface draws pictures (desktop, mobile, VS Code), not cells. */

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { agentName, ago, did, doing, money, percent, timeOfDay, tokenCount } from './copy'
+import { agentName, ago, did, doing, money, onFile, percent, timeOfDay, tokenCount } from './copy'
 
 test('each operation reads as a present-tense phrase', () => {
   expect(doing('READ', 'view.ts')).toBe('Reading view.ts')
@@ -23,6 +23,12 @@ test('each operation reads as a past-tense phrase', () => {
 test('an operation with no target is the verb alone', () => {
   expect(doing('RUN', '')).toBe('Running')
   expect(did('CALL', '')).toBe('Used')
+})
+
+test("a file chip says in one word what the agent does to it", () => {
+  expect(onFile('READ')).toBe('reading')
+  expect(onFile('EDIT')).toBe('editing')
+  expect(onFile('GREP')).toBe('working')
 })
 
 test('the main loop is Claude, the rest are subagents by their label', () => {

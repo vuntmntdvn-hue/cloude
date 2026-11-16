@@ -24,6 +24,46 @@ export const TONE_TINT: Readonly<Record<Tone, string>> = {
   quiet: 'rgba(128, 128, 128, 0.14)',
 }
 
+/** A tone's color for pictures: a mid-tone that reads on light and dark grounds. */
+export const TONE_FILL: Readonly<Record<Tone, string>> = {
+  good: '#2E9E5B',
+  attention: '#C2861A',
+  info: '#3D8BDB',
+  danger: '#E5484D',
+  quiet: '#9A9A9A',
+}
+
+// The context bar's colors for what fills the window; a picture takes no theme key.
+const FREE_FILL = 'rgba(128, 128, 128, 0.18)'
+const BUFFER_FILL = 'rgba(128, 128, 128, 0.42)'
+const OTHER_FILL = '#B4B2A9'
+// Looked up in order, so `MCP tools` is MCP before it is tools, and
+// `System prompt` a prompt before it is system.
+const CATEGORY_FILLS: readonly { match: RegExp; fill: string }[] = [
+  { match: /message/i, fill: '#7F77DD' },
+  { match: /mcp/i, fill: '#378ADD' },
+  { match: /prompt/i, fill: '#888780' },
+  { match: /tool/i, fill: '#1D9E75' },
+  { match: /memory/i, fill: '#BA7517' },
+  { match: /skill/i, fill: '#D4537E' },
+  { match: /agent/i, fill: '#D85A30' },
+  { match: /command/i, fill: '#639922' },
+]
+
+/**
+ * A context category's color by its kind and, for a used part, its name as
+ * /context prints it: messages violet, MCP tools blue, the system prompt
+ * slate, other tools teal, memory amber, skills pink, agents coral, slash
+ * commands green; any other used part grey. Cosmetic only: nothing else reads
+ * a category's name.
+ */
+export function categoryColor(name: string, kind: 'used' | 'free' | 'buffer'): string {
+  if (kind === 'free') return FREE_FILL
+  if (kind === 'buffer') return BUFFER_FILL
+
+  return CATEGORY_FILLS.find(({ match }) => match.test(name))?.fill ?? OTHER_FILL
+}
+
 // Lanes in order: Claude (the main loop), then each subagent.
 const LANE_STYLES: readonly LaneStyle[] = [
   { text: 'claude', fill: '#D97757', tint: 'rgba(217, 119, 87, 0.16)' },

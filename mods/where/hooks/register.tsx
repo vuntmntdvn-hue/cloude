@@ -15,8 +15,10 @@ import {
   turnStarted,
 } from './activity'
 import type { CallEnd, CallStart } from './activity'
+import { bandData, buildBand } from './band'
 import { contextReading } from './context'
 import type { ContextUsage } from './context'
+import { drawLines } from './lines-view'
 import { drawMainframe } from './mainframe'
 import { drawNativePanel } from './native-panel'
 import { panelData } from './panel-data'
@@ -34,15 +36,20 @@ const LOOKS: readonly Look[] = ['auto', 'desktop', 'mainframe']
 const LOOK_USAGE = 'Usage: /where look auto|desktop|mainframe'
 // The `$.store` key the folded sections are kept under, across sessions.
 const FOLDS_KEY = 'folds'
+// The band above the chat box, `where-mini`, and the `$.store` key its
+// on or off is kept under, across sessions.
+const MINI_COMMAND = 'where-mini'
+const MINI_KEY = 'mini'
 
 // Change a tag when its value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const where = atom({ plugin: 'where', key: 'where' } as const, null, { shape: 'where-2' })
+const where = atom({ plugin: 'where', key: 'where' } as const, null, { shape: 'where-3' })
 const activity = atom({ plugin: 'where', key: 'activity' } as const, null, { shape: 'activity-2' })
 const context = atom({ plugin: 'where', key: 'context' } as const, null, { shape: 'context-1' })
 const look = atom({ plugin: 'where', key: 'look' } as const, 'auto')
 const folds = atom({ plugin: 'where', key: 'folds' } as const, OPEN_FOLDS)
 const compactArmedAt = atom({ plugin: 'where', key: 'compactArmedAt' } as const, null)
+const isMiniShown = atom({ plugin: 'where', key: 'isMiniShown' } as const, true)
 
 // The module's own variables start over on a reload; the stored values stay.
 let home: string | undefined
@@ -192,6 +199,16 @@ async function pressFold($: EngineInterface, section: FoldSection): Promise<void
   await $.store.set(FOLDS_KEY, next)
 }
 
+/** `/where-mini`: hides or shows the band above the chat box, and keeps the choice for the next sessions. */
+async function toggleMini($: EngineInterface): Promise<string> {
+  const isShown = !(await read($, isMiniShown))
+
+  await update($, isMiniShown, () => isShown)
+  await $.store.set(MINI_KEY, isShown)
+
+  return `Where mini: ${isShown ? 'on' : 'off'}.`
+}
+
 /** The buttons for one draw: what they show, and the presses, each run in this module. */
 function controlsFor($: EngineInterface, armedAt: number | null): PanelControls {
   return {
@@ -210,17 +227,23 @@ export const register: Register = on => {
 
     const kept = asLook(await $.store.get(LOOK_KEY))
     const keptFolds = asFolds(await $.store.get(FOLDS_KEY))
+    // The band is on unless it was turned off.
+    const isMiniKept = (await $.store.get(MINI_KEY)) !== false
 
     if (kept !== null) await update($, look, () => kept)
     await update($, folds, () => keptFolds)
+    await update($, isMiniShown, () => isMiniKept)
     await $.command.register({
       name: COMMAND,
-      description: 'Show the session folder, its git status and what Claude is doing',
+      description: 'Open the panel: the session folder, its git status and what Claude is doing',
       argumentHint: '[look auto|desktop|mainframe]',
     })
-    // A widget is the panel's small form on the desktop app, which you can drag
-    // into a corner; other surfaces open it as a normal pane.
-    void $.ui.open({ id: PANE, title: TITLE, placement: 'widget' })
+    await $.command.register({
+      name: MINI_COMMAND,
+      description: 'Hide or show the one-line Where band above the chat box',
+    })
+    // The panel no longer opens by itself: the band above the chat box is
+    // always there, and `/where` opens the panel.
     $.clock.every(REFRESH_MS, () => void refresh($))
     void refresh($)
     void readBreakdown($)
@@ -238,6 +261,19 @@ export const register: Register = on => {
     void refresh($)
 
     return { text: 'Where panel opened.' }
+  })
+
+  on('command.run', { command: MINI_COMMAND }, async $ => ({ text: await toggleMini($) }))
+
+  // `where-mini`: one line above the chat box. It steps aside while a survey
+  // holds the row, and draws nothing while it is turned off.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || !(await read($, isMiniShown))) return next(e)
+
+    const [now, ops, filled] = await Promise.all([read($, where), read($, activity), read($, context)])
+    const line = buildBand(bandData(now, ops, filled, home), e.props.bodyColumns)
+
+    return drawLines($.ui.resolve(e), [line])
   })
 
   on('turn.start', async ($, e, next) => {
