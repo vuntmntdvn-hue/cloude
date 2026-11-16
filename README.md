@@ -22,7 +22,7 @@ cd ~/claude-portable
 | `settings.hooks.json` | merged into `~/.claude/settings.json` | Two hooks, plus one preference (below). |
 | `bin/kill-builds.sh` | `~/.local/bin/kill-builds` (link) · Windows: `~/bin/kill-builds` (copy) | Stops every Java, Gradle, Kotlin-daemon and Dart process of the user, to free the machine or clear a stuck build (below). |
 | — | pub's global bin | **build_ntd**, the user's own Flutter build CLI. Not in this repo; installed from its own (step 6). |
-| `.claude-plugin/marketplace.json`, `mods/` | installed as plugins, read from this folder (step 7) | Mods: plugins that change Claude Code's own interface. **where** is one panel with the session's folder, branch and uncommitted files. |
+| `.claude-plugin/marketplace.json`, `mods/` | installed as plugins, read from this folder (step 7) | Mods: plugins that change Claude Code's own interface. **where** is one panel with the session's folder, branch and uncommitted files, its context, and what Claude and its subagents are doing. |
 
 `~` is the user's home folder: `C:\Users\<name>` on Windows (Git Bash shows it
 as `/c/Users/<name>`), `/home/<name>` on Linux.
@@ -249,27 +249,63 @@ out of git.
 
 ### where
 
-One panel, opened at session start, for the session's folder and its
-uncommitted work:
+One panel, opened at session start, for where the session is, what it has
+changed, how full its context is, and what Claude is doing. Three sections:
 
-- **Header:** the folder's name over its parent path, or `worktree of …` when
+- **Where:** the folder's name over its parent path, or `worktree of …` when
   the folder is a linked worktree; beside it the branch and where it stands
   against the branch it tracks (never `main`): `in sync`, `↑2 to push`,
-  `↓1 to pull`, both when it has diverged, or `not on remote`.
-- **Counts:** a tile per group (staged, not staged, new, and conflicts when
-  there are any), then the lines added and removed in all, with a bar.
-- **Files:** under their folders (the top level as `./`), each with a colored
-  dot per state, matching the tiles, and its own `+/−` line counts. A deleted
-  file is struck through, a new one slanted.
+  `↓1 to pull`, both when it has diverged, or `not on remote`. Then a count
+  per group (staged, not staged, new, and conflicts when there are any), the
+  lines added and removed in all with a bar, and the files under their folders
+  (the top level as `./`), each with a colored dot per state and its own `+/−`
+  counts; a deleted file is struck through, a new one slanted.
+- **Context:** the tokens the last response was answered over, of the
+  model's window, and the percentage; a bar split by what fills the window
+  (system prompt, tools, memory, messages, free space, the compaction
+  reserve) in `/context`'s colors, its largest parts, and how far
+  auto-compaction is.
+- **Activity:** a lane per agent, Claude first, then each subagent as α, β …
+  in the order they act, saying what it is doing (`Editing view.ts · 2
+  running`, `Thinking…`, `Idle`) and its own tokens; a file an agent is on
+  right now is marked in the Where section. Below that, the last finished
+  calls, then the session's reads, edits, tool calls and lines, and its
+  tokens in, out and cached, with the cost where the plan reports one.
 
-Line counts come from `git diff --numstat` for staged and unstaged changes,
-and from reading new files, which are skipped over 1 MB and re-read only when
-their size or modified time changes. The panel refreshes after each of
-Claude's tool calls and every 5 s, runs no count for a group with no files,
-and reads git with optional locks off, so it never holds `index.lock`.
+It has two looks, one per surface: the terminal gets the Mainframe, an ASCII
+console that a surface module animates on the app's own clock; the desktop
+app, VS Code and mobile get a look built like the desktop app's. Colors are
+theme keys, so both follow light and dark mode. `/where look
+auto|desktop|mainframe` overrides the choice, kept across sessions.
 
-It asks the desktop app for its floating widget form, which you could drag
-into the bottom-right corner or the session rail; the current app has no
+Buttons:
+
+- **Compact**, by the Context heading: the first press asks for a second
+  within 5 seconds, which then compacts the conversation as `/compact` does.
+  While Claude is working it only says to wait, since compaction runs between
+  turns.
+- **Hide / Show** on the files and on the activity fold each to its one-line
+  summary, kept across sessions.
+- While the panel has the focus, `c`, `f` and `a` press them.
+
+Where the numbers come from:
+
+- Files: `git status` and `git diff --numstat`, read with optional locks off
+  (so the panel never holds `index.lock`), after each of Claude's tool calls
+  and every 5 s; new files are counted by reading them, skipped over 1 MB and
+  re-read only when their size or modified time changes.
+- Activity: each tool call's start and end, and the main loop's turns.
+- Tokens: each model response's usage, as it ends.
+- Context: the session's usage after each response; the breakdown by
+  category at session start and each main turn's end, a local estimate that
+  sends no API request.
+
+None of it adds a wait to a tool call or to Claude's streaming. A version that
+changes the shape of what the panel keeps starts its counts over, and the
+token and context numbers appear once a response has finished.
+
+The panel asks the desktop app for its floating widget form, which you could
+drag into the bottom-right corner or the session rail; the current app has no
 widgets for mods and docks it in the right column instead. `/where` reopens
 it after you close it.
 
@@ -279,7 +315,13 @@ Check it:
   `mods/where`.
 - In a session inside a repository the panel shows the folder and branch.
   `printf 'a\nb\n' > x.tmp` there shows `x.tmp +2`, slanted, under `./`
-  within 5 s, and the `new` tile counts it; `rm x.tmp` takes it away.
+  within 5 s, and the `new` count rises; `rm x.tmp` takes it away.
+- Ask Claude to read three files at once: its lane shows `Reading … · 3
+  running` (`READ×3` in the Mainframe) and three finished reads follow.
+  Subagents get lanes of their own.
+- After a response, the Context section shows its numbers and bar; Compact
+  turns into Confirm compact for 5 seconds.
+- `/where look mainframe` switches the look, and a new session keeps it.
 - `claude plugin test mods/where` runs its unit tests.
 
 ## Not in this kit (on purpose)
