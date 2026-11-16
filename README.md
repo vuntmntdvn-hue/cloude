@@ -249,19 +249,37 @@ out of git.
 
 ### where
 
-One panel with the session's folder, `worktree of …` when that folder is a
-linked worktree, the branch against the branch it tracks (never `main`), and
-the uncommitted files grouped as `git status` groups them. It refreshes after
-each of Claude's tool calls and every 5 s, and reads git with optional locks
-off, so it never holds `index.lock`. On the desktop app it opens as a widget,
-the small form of a pane, which you drag into a corner; `/where` reopens it.
+One panel, opened at session start, for the session's folder and its
+uncommitted work:
+
+- **Header:** the folder's name over its parent path, or `worktree of …` when
+  the folder is a linked worktree; beside it the branch and where it stands
+  against the branch it tracks (never `main`): `in sync`, `↑2 to push`,
+  `↓1 to pull`, both when it has diverged, or `not on remote`.
+- **Counts:** a tile per group (staged, not staged, new, and conflicts when
+  there are any), then the lines added and removed in all, with a bar.
+- **Files:** under their folders (the top level as `./`), each with a colored
+  dot per state, matching the tiles, and its own `+/−` line counts. A deleted
+  file is struck through, a new one slanted.
+
+Line counts come from `git diff --numstat` for staged and unstaged changes,
+and from reading new files, which are skipped over 1 MB and re-read only when
+their size or modified time changes. The panel refreshes after each of
+Claude's tool calls and every 5 s, runs no count for a group with no files,
+and reads git with optional locks off, so it never holds `index.lock`.
+
+It asks the desktop app for its floating widget form, which you could drag
+into the bottom-right corner or the session rail; the current app has no
+widgets for mods and docks it in the right column instead. `/where` reopens
+it after you close it.
 
 Check it:
 
 - `claude plugin list` shows `where@cloude` with `Read from:` this folder's
   `mods/where`.
 - In a session inside a repository the panel shows the folder and branch.
-  `touch x.tmp` there lists `? x.tmp` within 5 s; `rm x.tmp` takes it away.
+  `printf 'a\nb\n' > x.tmp` there shows `x.tmp +2`, slanted, under `./`
+  within 5 s, and the `new` tile counts it; `rm x.tmp` takes it away.
 - `claude plugin test mods/where` runs its unit tests.
 
 ## Not in this kit (on purpose)
