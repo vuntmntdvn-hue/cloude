@@ -1,0 +1,7 @@
+{
+  "name": "where",
+  "version": "0.1.0",
+  "description": "One panel with the session's folder (worktrees included), its branch and its uncommitted files",
+  "author": { "name": "vuntm" },
+  "types": "./types/index.d.ts"
+}

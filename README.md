@@ -22,6 +22,7 @@ cd ~/claude-portable
 | `settings.hooks.json` | merged into `~/.claude/settings.json` | Two hooks, plus one preference (below). |
 | `bin/kill-builds.sh` | `~/.local/bin/kill-builds` (link) · Windows: `~/bin/kill-builds` (copy) | Stops every Java, Gradle, Kotlin-daemon and Dart process of the user, to free the machine or clear a stuck build (below). |
 | — | pub's global bin | **build_ntd**, the user's own Flutter build CLI. Not in this repo; installed from its own (step 6). |
+| `.claude-plugin/marketplace.json`, `mods/` | installed as plugins, read from this folder (step 7) | Mods: plugins that change Claude Code's own interface. **where** is one panel with the session's folder, branch and uncommitted files. |
 
 `~` is the user's home folder: `C:\Users\<name>` on Windows (Git Bash shows it
 as `/c/Users/<name>`), `/home/<name>` on Linux.
@@ -222,12 +223,54 @@ Optional extras it uses when present: `adb` on `PATH` for `build_ntd install`;
 on Linux `wl-copy` or `xclip` for its clipboard copy (agent builds pass
 `--no-copy` anyway).
 
+## 7. Mods
+
+`mods/` holds mods: Claude Code plugins whose hooks module changes Claude's
+own interface. `.claude-plugin/marketplace.json` lists them, which makes this
+folder a plugin marketplace named `cloude`. Add it once per machine, then
+install each mod from it:
+
+```bash
+claude plugin marketplace add "$(pwd -W 2>/dev/null || pwd)"
+claude plugin install where@cloude
+```
+
+(`pwd -W` gives Git Bash's folder as `C:/Users/...`, which the Windows
+`claude` reads; elsewhere it fails and `pwd` answers.) With the desktop app
+alone, `claude` may not be on `PATH`: on macOS the app keeps it at
+`~/Library/Application Support/Claude/claude-code/<version>/<build>/claude.app/Contents/MacOS/claude`.
+
+The marketplace is a local folder, so Claude Code reads each mod straight
+from `mods/<name>/`, never from a copy: after a `git pull`, run
+`/reload-plugins` in a session or start a new one. No links or copies, on
+Windows either. The engine writes each mod's API types into
+`mods/<name>/.claude-plugin/types/` when it loads it; `.gitignore` keeps them
+out of git.
+
+### where
+
+One panel with the session's folder, `worktree of …` when that folder is a
+linked worktree, the branch against the branch it tracks (never `main`), and
+the uncommitted files grouped as `git status` groups them. It refreshes after
+each of Claude's tool calls and every 5 s, and reads git with optional locks
+off, so it never holds `index.lock`. On the desktop app it opens as a widget,
+the small form of a pane, which you drag into a corner; `/where` reopens it.
+
+Check it:
+
+- `claude plugin list` shows `where@cloude` with `Read from:` this folder's
+  `mods/where`.
+- In a session inside a repository the panel shows the folder and branch.
+  `touch x.tmp` there lists `? x.tmp` within 5 s; `rm x.tmp` takes it away.
+- `claude plugin test mods/where` runs its unit tests.
+
 ## Not in this kit (on purpose)
 
 - **Project rules** (`<repo>/CLAUDE.md`, `<repo>/.claude/rules/`, agents, project
   skills) travel with each repository. Clone the repo and they're there.
 - **Memories** (`~/.claude/projects/<project>/memory/`) are per project and
   per machine. The habits worth keeping everywhere are already in `CLAUDE.md`.
-- **Model, plugins, marketplaces, theme, notifications:** set them on the new
-  machine through the app's own settings.
+- **Model, other plugins and marketplaces, theme, notifications:** set them on
+  the new machine through the app's own settings. Only the mods in `mods/`
+  come with the kit (step 7).
 - **Secrets:** no tokens or keys are in this folder, and none should be added.

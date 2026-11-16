@@ -1,0 +1,12 @@
+{
+  "name": "cloude",
+  "owner": { "name": "vuntm" },
+  "metadata": { "description": "vuntm's Claude Code mods, kept with the claude-portable kit" },
+  "plugins": [
+    {
+      "name": "where",
+      "source": "./mods/where",
+      "description": "One panel with the session's folder (worktrees included), its branch and its uncommitted files"
+    }
+  ]
+}

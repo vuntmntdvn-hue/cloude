@@ -1,0 +1,2 @@
+# API types the engine writes beside each mod when it loads it.
+mods/*/.claude-plugin/types/
