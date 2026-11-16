@@ -48,8 +48,84 @@ export type Where = {
   error: string | null
 }
 
+/** What an agent is doing, as the console names it. */
+export type OpKind = 'READ' | 'EDIT' | 'GREP' | 'FIND' | 'RUN' | 'NET' | 'SPAWN' | 'CALL'
+
+/** One tool call still running. */
+export type RunningCall = {
+  callId: string
+  op: OpKind
+  /** A short name for what it works on: a file's name, a pattern, a command. */
+  target: string
+  /** The absolute path of the file it reads or edits; null for other calls. */
+  filePath: string | null
+  startedAt: number
+}
+
+/** One agent's lane: the main loop's, or a subagent's by its id. */
+export type Lane = {
+  /** Null for the main loop. */
+  agentId: string | null
+  label: string
+  running: RunningCall[]
+  lastActiveAt: number
+}
+
+export type Outcome =
+  | { kind: 'ok' }
+  | { kind: 'lines'; added: number; deleted: number }
+  | { kind: 'denied' }
+  | { kind: 'failed' }
+
+/** One finished call in the console's log. */
+export type LogEntry = { at: number; label: string; op: OpKind; target: string; outcome: Outcome }
+
+export type Counters = {
+  reads: number
+  edits: number
+  calls: number
+  added: number
+  deleted: number
+}
+
+/** Tokens as the API reports them for each model response, added up. */
+export type TokenCounts = {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+}
+
+/** The session's context fill and cost, as last read; null where not reported. */
+export type SessionMeter = { contextPercent: number | null; usd: number | null }
+
+/** What the agents have done this session, as the console shows it. */
+export type Activity = {
+  startedAt: number
+  /** Whether the main loop is in a turn. */
+  isTurnActive: boolean
+  /** The main loop's lane first, then subagents' in the order they appeared. */
+  lanes: Lane[]
+  /** Oldest first. */
+  log: LogEntry[]
+  counters: Counters
+  /** Each subagent's label, by its id, kept after its lane leaves. */
+  labels: Record<string, string>
+  /** Every agent's responses together. */
+  tokens: TokenCounts
+  /** Each agent's own, by label (`main`, `α` …), kept after its lane leaves. */
+  tokensByLabel: Record<string, TokenCounts>
+  meter: SessionMeter | null
+}
+
+/**
+ * Which look the panel draws: `auto` picks by surface (Mainframe in the
+ * terminal, the desktop look elsewhere); the others hold on every surface.
+ */
+export type Look = 'auto' | 'desktop' | 'mainframe'
+
 declare module 'claude-code' {
   interface PluginState {
-    where: { where: Shaped<Where | null> }
+    where: { where: Shaped<Where | null>; activity: Shaped<Activity | null>; look: Look }
   }
 }

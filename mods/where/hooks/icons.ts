@@ -38,3 +38,33 @@ export const BRANCH_ICON = icon(
 )
 
 export const CHECK_ICON = icon('<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5l5 -5"/>', GREEN)
+
+// An arc turning on a faint ring. Animated in the picture itself (SMIL), so it
+// spins with no redraw; drawn as an interactive Svg, where SMIL is sure to run.
+export const SPINNER_ICON =
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${GREY}" stroke-width="2.5" stroke-linecap="round">` +
+  '<circle cx="12" cy="12" r="9" opacity="0.3"/>' +
+  '<path d="M12 3a9 9 0 0 1 9 9"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></path>' +
+  '</svg>'
+
+/** A small dot that breathes, in an agent's fill: the mark of an agent at work on a file. */
+export function pulseDot(fill: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="${fill}">` +
+    '<animate attributeName="opacity" values="1;0.3;1" dur="1.4s" repeatCount="indefinite"/></circle></svg>'
+  )
+}
+
+/** A round avatar in an agent's fill: Claude's carries a four-point spark, a subagent's its label. */
+export function avatar(fill: string, label: string | null): string {
+  const mark =
+    label === null
+      ? '<path d="M12 5l1.6 5.4L19 12l-5.4 1.6L12 19l-1.6-5.4L5 12l5.4-1.6z" fill="#ffffff"/>'
+      : `<text x="12" y="16.2" text-anchor="middle" font-family="-apple-system, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#ffffff">${escapeXml(label)}</text>`
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="${fill}"/>${mark}</svg>`
+}
+
+function escapeXml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
