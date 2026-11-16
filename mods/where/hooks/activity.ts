@@ -8,6 +8,11 @@ const LOG_LIMIT = 30
 // A subagent's lane stays this long after its last call ends, then leaves.
 const LANE_LINGER_MS = 20_000
 
+// A shell variable assignment before a command's program: `NAME=value`.
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+// The characters that end a simple command in a command line.
+const COMMAND_ENDS = [';', '&', '|', '\n']
+
 const NO_COUNTS: Counters = { reads: 0, edits: 0, calls: 0, added: 0, deleted: 0 }
 const NO_TOKENS: TokenCounts = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
 
@@ -244,11 +249,66 @@ function other(op: OpKind, target: string): CallSummary {
   return { op, target, filePath: null }
 }
 
-/** The program a command runs: its first word that is not a `NAME=value`, without its folder. */
+/**
+ * The program a command line runs first: the first word, in the first simple
+ * command that has one, that is not a `NAME=value`; without its folder.
+ */
 function commandName(command: string): string {
-  const word = command.trim().split(/\s+/).find(part => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(part)) ?? ''
+  for (const words of simpleCommands(command)) {
+    const program = words.find(word => !ASSIGNMENT.test(word))
 
-  return word.split('/').pop() ?? word
+    if (program !== undefined) return program.split('/').pop() || program
+  }
+
+  return ''
+}
+
+/**
+ * Splits a command line at `;`, `&`, `|`, `&&`, `||` and newlines into its
+ * simple commands' words, as a shell reads them: a quoted part stays in one
+ * word, its quotes dropped, and a backslash keeps the next character.
+ */
+function simpleCommands(command: string): string[][] {
+  const commands: string[][] = [[]]
+  let word = ''
+  let isInWord = false
+  let quote: string | null = null
+
+  const endWord = () => {
+    if (isInWord) commands[commands.length - 1]?.push(word)
+    word = ''
+    isInWord = false
+  }
+
+  for (let i = 0; i < command.length; i += 1) {
+    const char = command.charAt(i)
+
+    if (quote !== null) {
+      if (char === quote) quote = null
+      else if (char === '\\' && quote === '"' && i + 1 < command.length) word += command.charAt((i += 1))
+      else word += char
+    } else if (char === '"' || char === "'") {
+      quote = char
+      isInWord = true
+    } else if (char === '\\' && i + 1 < command.length) {
+      word += command.charAt((i += 1))
+      isInWord = true
+    } else if (COMMAND_ENDS.includes(char)) {
+      endWord()
+      if ((commands[commands.length - 1]?.length ?? 0) > 0) commands.push([])
+      // `&&` and `||` are one separator.
+      if ((char === '&' || char === '|') && command.charAt(i + 1) === char) i += 1
+    } else if (/\s/.test(char)) {
+      endWord()
+    } else {
+      word += char
+      isInWord = true
+    }
+  }
+
+  endWord()
+
+  return commands
 }
 
 function hostOf(url: string): string {

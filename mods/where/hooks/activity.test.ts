@@ -67,6 +67,24 @@ test('a command is named by its program, past variables and folders', () => {
   expect(describeCall('Bash', { command: 'CI=1 /usr/bin/flutter test' }).target).toBe('flutter')
 })
 
+test('a quoted assignment with spaces is skipped whole, and a command of only assignments too', () => {
+  const command = 'C="/Users/me/Library/Application Support/Claude/claude"; cd /repo && "$C" plugin test'
+
+  expect(describeCall('Bash', { command }).target).toBe('cd')
+})
+
+test('a quoted program keeps its name without its quotes', () => {
+  expect(describeCall('Bash', { command: '"$C" plugin test mods/where' }).target).toBe('$C')
+  expect(describeCall('Bash', { command: "'/opt/my tools/run' --fast" }).target).toBe('run')
+})
+
+test('separators and escapes split a command line as a shell would', () => {
+  expect(describeCall('Bash', { command: 'X=1 Y=2 && npm test' }).target).toBe('npm')
+  expect(describeCall('Bash', { command: 'A=1 | grep x' }).target).toBe('grep')
+  expect(describeCall('Bash', { command: 'my\\ tool --run' }).target).toBe('my tool')
+  expect(describeCall('Bash', { command: '' }).target).toBe('')
+})
+
 test('an unknown or MCP tool is a CALL by its short name', () => {
   expect(describeCall('mcp__figma__get_screenshot', {})).toEqual({
     op: 'CALL',

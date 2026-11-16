@@ -1,4 +1,4 @@
-import type { Activity, FileGroup, FileLines, LineCounts, Where } from '../types'
+import type { Activity, ContextReading, FileGroup, FileLines, Folds, LineCounts, Where } from '../types'
 import { sumLines } from './line-counts'
 import { branchLabel, folderTree, groupCounts, splitPath, syncTag, tildify } from './view'
 import type { Tag } from './view'
@@ -32,6 +32,9 @@ export type PanelData = {
   /** Null when there is nothing uncommitted, or no repository. */
   changes: PanelChanges | null
   activity: Activity | null
+  /** Null until the first reading. */
+  context: ContextReading | null
+  folds: Folds
 }
 
 const READING: PanelData['folder'] = { name: '…', under: 'reading the folder' }
@@ -39,10 +42,14 @@ const READING: PanelData['folder'] = { name: '…', under: 'reading the folder' 
 export function panelData(
   where: Where | null,
   activity: Activity | null,
+  context: ContextReading | null,
+  folds: Folds,
   home: string | undefined,
   maxRows: number,
 ): PanelData {
-  if (where === null) return { folder: READING, branch: null, error: null, changes: null, activity }
+  if (where === null) {
+    return { folder: READING, branch: null, error: null, changes: null, activity, context, folds }
+  }
 
   const place = splitPath(tildify(where.cwd, home))
   const under = where.worktreeOf === null ? place.folder : `worktree of ${tildify(where.worktreeOf, home)}`
@@ -64,6 +71,8 @@ export function panelData(
             ...cutTree(folderTree(files), maxRows),
           },
     activity,
+    context,
+    folds,
   }
 }
 

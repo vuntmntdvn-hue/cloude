@@ -4,7 +4,7 @@ import type { FrameLine } from './frame'
 
 // Spaces in the frame are drawn as no-break spaces, so a surface that folds
 // runs of spaces still keeps the columns lined up.
-const NO_BREAK_SPACE = ' '
+const NO_BREAK_SPACE = '\u00a0'
 
 export type LineElements = {
   Box: ElementConstructor<BoxProps>

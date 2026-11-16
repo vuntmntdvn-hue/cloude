@@ -1,17 +1,34 @@
 import type { Elements, RenderSurface } from 'claude-code'
 
-import type { Activity, Lane, LineCounts, LogEntry, TokenCounts } from '../types'
+import type { Activity, ContextReading, Lane, LineCounts, LogEntry, TokenCounts } from '../types'
 import { freshTokens } from './activity'
+import { contextBar, contextLegend } from './context'
+import type { BarRun } from './context'
 import { agentName, ago, did, doing, money, percent, timeOfDay, tokenCount } from './copy'
 import { avatar, BRANCH_ICON, CHECK_ICON, FOLDER_ICON, pulseDot, ratioBar, SPINNER_ICON } from './icons'
 import { laneStyle, TONE_COLOR, TONE_TINT } from './palette'
 import type { PanelChanges, PanelData, PanelRow } from './panel-data'
 import { GROUP_NAME, GROUP_ORDER, GROUP_TONE, linesLabel } from './view'
 import type { Tag } from './view'
+import type { FoldSection, PanelControls } from './controls'
 
 type Ui = Elements[RenderSurface]
 
+// Keys that press the buttons while the panel has the focus.
+const COMPACT_KEY = 'c'
+const FOLD_KEYS: Readonly<Record<FoldSection, string>> = { files: 'f', activity: 'a' }
+
 const RECENT_ROWS = 4
+// The context bar splits its width in this many shares, so every used part
+// keeps at least one; and how many parts its legend names.
+const BAR_SHARES = 100
+const LEGEND_PARTS = 4
+// Translucent greys for the window left and the compaction reserve, on light
+// and dark themes alike.
+const FREE_TINT = 'rgba(128, 128, 128, 0.16)'
+const BUFFER_TINT = 'rgba(128, 128, 128, 0.34)'
+// One caption line of height: what each bar segment holds.
+const NO_BREAK_SPACE = '\u00a0'
 const ICON_SIZE = 14
 const AVATAR_SIZE = 20
 const DOT_SIZE = 7
@@ -21,25 +38,40 @@ const DOT_SIZE = 7
  * changes by folder, then each agent's activity and the latest actions.
  * `now` is the clock, for the "2s ago" times.
  */
-export function drawNativePanel(ui: Ui, data: PanelData, now: number) {
+export function drawNativePanel(ui: Ui, data: PanelData, now: number, controls: PanelControls) {
   const { Box, Text } = ui
 
   return (
     <Box flexDirection="column" gap="md">
-      {header(ui, data)}
+      {header(ui, data, controls)}
       {data.error !== null && (
         <Text size="caption" color="error">
           {data.error}
         </Text>
       )}
       {data.branch !== null &&
-        (data.changes === null ? cleanLine(ui) : changes(ui, data.changes, data.activity))}
-      {data.activity !== null && activity(ui, data.activity, now)}
+        (data.changes === null
+          ? cleanLine(ui)
+          : changes(ui, data.changes, data.activity, data.folds.files, controls))}
+      {data.context !== null && contextMeter(ui, data.context, controls)}
+      {data.activity !== null && activity(ui, data.activity, now, data.folds.activity, controls)}
     </Box>
   )
 }
 
-function header(ui: Ui, data: PanelData) {
+/** A quiet text button: secondary, drawn dim until the pointer or focus is on it. */
+function quietButton(ui: Ui, key: string, label: string, onPress: () => void, hotkey?: string) {
+  const { Button } = ui
+
+  return <Button key={key} label={label} dimColor plain onPress={onPress} {...(hotkey === undefined ? {} : { hotkey })} />
+}
+
+/** `Hide` or `Show` for a section; the section's heading row stays either way. */
+function foldButton(ui: Ui, section: FoldSection, isFolded: boolean, controls: PanelControls) {
+  return quietButton(ui, `fold-${section}`, isFolded ? 'Show' : 'Hide', () => controls.onFold(section), FOLD_KEYS[section])
+}
+
+function header(ui: Ui, data: PanelData, controls: PanelControls) {
   const { Box, Text } = ui
 
   return (
@@ -87,21 +119,33 @@ function cleanLine(ui: Ui) {
   )
 }
 
-/** The group pills and totals, the split bar, then the files under their folders. */
-function changes(ui: Ui, data: PanelChanges, activity: Activity | null) {
+/** The group pills and totals, then (unless folded) the split bar and the files under their folders. */
+function changes(
+  ui: Ui,
+  data: PanelChanges,
+  activity: Activity | null,
+  isFolded: boolean,
+  controls: PanelControls,
+) {
   const { Box, Text } = ui
   const groups = GROUP_ORDER.filter(group => group !== 'conflicted' || data.counts.conflicted > 0)
   const { added, deleted } = data.totals
+  const summary = (
+    <Box flexDirection="row" alignItems="center" gap="xs">
+      {groups.map(group =>
+        pill(ui, { text: `${data.counts[group]} ${GROUP_NAME[group]}`, tone: GROUP_TONE[group] }),
+      )}
+      <Box flexGrow={1} />
+      {lineCounts(ui, data.totals)}
+      {foldButton(ui, 'files', isFolded, controls)}
+    </Box>
+  )
+
+  if (isFolded) return summary
 
   return (
     <Box flexDirection="column" gap="sm">
-      <Box flexDirection="row" alignItems="center" gap="xs">
-        {groups.map(group =>
-          pill(ui, { text: `${data.counts[group]} ${GROUP_NAME[group]}`, tone: GROUP_TONE[group] }),
-        )}
-        <Box flexGrow={1} />
-        {lineCounts(ui, data.totals)}
-      </Box>
+      {summary}
       {added + deleted > 0 &&
         picture(ui, ratioBar(added, deleted), `${added} lines added, ${deleted} removed`)}
       {data.tree.map(({ folder, rows }) => (
@@ -171,24 +215,113 @@ function agentChip(ui: Ui, row: PanelRow, activity: Activity | null) {
   )
 }
 
-/** The agents and what each is doing, then the latest actions and the session's totals. */
-function activity(ui: Ui, data: Activity, now: number) {
+/**
+ * `Context  92k of 200k · 46%`, a bar split by what fills the window (in the
+ * colors /context uses), the largest parts, and how far auto-compaction is.
+ */
+function contextMeter(ui: Ui, reading: ContextReading, controls: PanelControls) {
+  const { Box, Text } = ui
+  const { tokens, window, percent: filled, parts, compactAt } = reading
+  const amount =
+    tokens === null
+      ? 'counting from the first response'
+      : `${tokenCount(tokens)} of ${tokenCount(window)}${filled === null ? '' : ` · ${percent(filled)}`}`
+  const legend = contextLegend(parts, LEGEND_PARTS)
+
+  return (
+    <Box flexDirection="column" gap="xs">
+      <Box flexDirection="row" alignItems="center" gap="sm">
+        <Text size="footnote" weight="semibold" dimColor>
+          Context
+        </Text>
+        <Box flexGrow={1} flexShrink={1} minWidth={0} alignItems="flex-end">
+          <Text size="caption" dimColor tabular wrap="truncate-end">
+            {amount}
+          </Text>
+        </Box>
+        {compactButton(ui, controls)}
+      </Box>
+      {parts.length > 0 && (
+        <Box flexDirection="row">
+          {contextBar(parts, BAR_SHARES).map(run => (
+            <Box width={0} flexGrow={run.cells} backgroundColor={segmentColor(run)}>
+              <Text size="caption">{NO_BREAK_SPACE}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+      {legend.shown.length > 0 && (
+        <Box flexDirection="row" flexWrap="wrap" columnGap="sm">
+          {legend.shown.map(part => (
+            <Box flexDirection="row" gap="xs">
+              <Text size="caption" color={part.color}>
+                ●
+              </Text>
+              <Text size="caption" dimColor>
+                {`${part.name} ${tokenCount(part.tokens)}`}
+              </Text>
+            </Box>
+          ))}
+          {legend.more > 0 && (
+            <Text size="caption" dimColor>
+              {`+${legend.more} more`}
+            </Text>
+          )}
+        </Box>
+      )}
+      {compactAt !== null && tokens !== null && (
+        <Text size="caption" dimColor>
+          {`Compacts at ${tokenCount(compactAt)} · ${tokenCount(Math.max(0, compactAt - tokens))} to go`}
+        </Text>
+      )}
+    </Box>
+  )
+}
+
+/** `Compact`, then for 5 seconds `Confirm compact`, drawn as the main action while it waits. */
+function compactButton(ui: Ui, controls: PanelControls) {
+  const { Button } = ui
+
+  return controls.isCompactArmed ? (
+    <Button key="compact" label="Confirm compact" variant="primary" hotkey={COMPACT_KEY} onPress={controls.onCompact} />
+  ) : (
+    <Button key="compact" label="Compact" variant="secondary" hotkey={COMPACT_KEY} onPress={controls.onCompact} />
+  )
+}
+
+/** A used part fills with its own theme color; free space and the compaction reserve with greys. */
+function segmentColor(run: BarRun): string {
+  if (run.kind === 'used') return run.color
+
+  return run.kind === 'free' ? FREE_TINT : BUFFER_TINT
+}
+
+/** The agents and what each is doing, then the latest actions and the session's totals; folded, the heading alone. */
+function activity(ui: Ui, data: Activity, now: number, isFolded: boolean, controls: PanelControls) {
   const { Box, Text } = ui
   const isWorking = data.lanes.some(lane => lane.running.length > 0)
   const status = isWorking ? 'Working' : data.isTurnActive ? 'Thinking' : 'Idle'
   const recent = data.log.slice(-RECENT_ROWS).reverse()
   const { reads, edits, calls } = data.counters
-
-  return (
-    <Box flexDirection="column" gap="sm">
-      <Box flexDirection="row" justifyContent="space-between">
-        <Text size="footnote" weight="semibold" dimColor>
-          Activity
-        </Text>
-        <Text size="caption" dimColor>
+  const heading = (
+    <Box flexDirection="row" alignItems="center" gap="sm">
+      <Text size="footnote" weight="semibold" dimColor>
+        Activity
+      </Text>
+      <Box flexGrow={1} flexShrink={1} minWidth={0} alignItems="flex-end">
+        <Text size="caption" dimColor wrap="truncate-end">
           {`${status} · since ${timeOfDay(data.startedAt)}`}
         </Text>
       </Box>
+      {foldButton(ui, 'activity', isFolded, controls)}
+    </Box>
+  )
+
+  if (isFolded) return heading
+
+  return (
+    <Box flexDirection="column" gap="sm">
+      {heading}
       {data.lanes.map((lane, index) =>
         laneRow(ui, lane, index, data.isTurnActive, data.tokensByLabel[lane.label]),
       )}
@@ -213,7 +346,7 @@ function activity(ui: Ui, data: Activity, now: number) {
   )
 }
 
-/** `Tokens 182k in · 24k out · 1.2M cached · context 46% · $1.24`; what is not reported is left out. */
+/** `Tokens 182k in · 24k out · 1.2M cached · $1.24`; what is not reported is left out. */
 function tokenLine(ui: Ui, data: Activity) {
   const { Text } = ui
   const { input, output, cacheRead, cacheWrite } = data.tokens
@@ -221,7 +354,6 @@ function tokenLine(ui: Ui, data: Activity) {
     ...(input + cacheWrite + output + cacheRead > 0
       ? [`${tokenCount(input + cacheWrite)} in`, `${tokenCount(output)} out`, `${tokenCount(cacheRead)} cached`]
       : []),
-    ...(data.meter?.contextPercent == null ? [] : [`context ${percent(data.meter.contextPercent)}`]),
     ...(data.meter?.usd == null ? [] : [money(data.meter.usd)]),
   ]
 

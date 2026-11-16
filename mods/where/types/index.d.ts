@@ -99,6 +99,29 @@ export type TokenCounts = {
 /** The session's context fill and cost, as last read; null where not reported. */
 export type SessionMeter = { contextPercent: number | null; usd: number | null }
 
+/** One row of the context breakdown, as /context lists it; `color` is a theme key. */
+export type ContextPart = {
+  name: string
+  tokens: number
+  color: string
+  kind: 'used' | 'free' | 'buffer'
+}
+
+/** What fills the context window, as last read. */
+export type ContextReading = {
+  /** Input tokens the last response was answered over; null before one. */
+  tokens: number | null
+  /** The model's context window, in tokens. */
+  window: number
+  percent: number | null
+  /** The breakdown's rows, deferred tool schemas left out; empty until one is read. */
+  parts: ContextPart[]
+  /** The window the breakdown is measured against, which compaction may make smaller. */
+  measuredAgainst: number | null
+  /** The token count auto-compaction runs at; null when it is off or not yet read. */
+  compactAt: number | null
+}
+
 /** What the agents have done this session, as the console shows it. */
 export type Activity = {
   startedAt: number
@@ -124,8 +147,19 @@ export type Activity = {
  */
 export type Look = 'auto' | 'desktop' | 'mainframe'
 
+/** Which sections are folded to their one-line summary. */
+export type Folds = { files: boolean; activity: boolean }
+
 declare module 'claude-code' {
   interface PluginState {
-    where: { where: Shaped<Where | null>; activity: Shaped<Activity | null>; look: Look }
+    where: {
+      where: Shaped<Where | null>
+      activity: Shaped<Activity | null>
+      context: Shaped<ContextReading | null>
+      look: Look
+      folds: Folds
+      /** When Compact was first pressed and waits for the second; null when it does not. */
+      compactArmedAt: number | null
+    }
   }
 }

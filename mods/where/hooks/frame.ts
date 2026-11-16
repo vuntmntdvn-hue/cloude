@@ -1,7 +1,9 @@
 import type { Color } from 'claude-code'
 
-import type { Activity, Lane, LineCounts, LogEntry, Outcome, TokenCounts } from '../types'
+import type { Activity, ContextReading, Lane, LineCounts, LogEntry, Outcome, TokenCounts } from '../types'
 import { freshTokens } from './activity'
+import { contextBar, contextLegend } from './context'
+import type { BarRun } from './context'
 import { money, percent, tokenCount } from './copy'
 import { laneStyle, OP_COLOR, TONE_COLOR } from './palette'
 import type { PanelChanges, PanelData, PanelRow } from './panel-data'
@@ -26,6 +28,8 @@ const SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 const IDLE_MARK = '·'
 const BAR_CELLS = 9
 const LOG_ROWS = 4
+// How many parts of the context the legend names.
+const LEGEND_PARTS = 3
 // Frames per blink of the cursor and the markers on files being worked on.
 const BLINK_FRAMES = 4
 const OP_WIDTH = 7
@@ -38,7 +42,10 @@ const LABEL_WIDTH = 6
 export function buildFrame(data: PanelData, frame: number, columns: number, now: number): FrameLine[] {
   const width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.floor(columns)))
 
-  return [...whereBox(data, frame, width), ...opsBox(data.activity, frame, width, now)]
+  return [
+    ...whereBox(data, frame, width),
+    ...opsBox(data.activity, data.context, data.folds.activity, frame, width, now),
+  ]
 }
 
 function whereBox(data: PanelData, frame: number, width: number): FrameLine[] {
@@ -61,12 +68,14 @@ function whereBox(data: PanelData, frame: number, width: number): FrameLine[] {
     return [...lines, row(width, [{ text: '✓ ', color: 'success' }, plain('nothing to commit')])]
   }
 
-  return [...lines, ...changeLines(data.changes, data.activity, frame, width)]
+  return [...lines, ...changeLines(data.changes, data.activity, data.folds.files, frame, width)]
 }
 
+/** The group counts and the totals bar; then, unless folded, the files by folder. */
 function changeLines(
   changes: PanelChanges,
   activity: Activity | null,
+  isFolded: boolean,
   frame: number,
   width: number,
 ): FrameLine[] {
@@ -79,6 +88,7 @@ function changeLines(
   const { added, deleted } = changes.totals
 
   if (added + deleted > 0) lines.push(row(width, totalsBar(changes.totals, width)))
+  if (isFolded) return lines
 
   for (const { folder, rows } of changes.tree) {
     lines.push(row(width, [dim(folder)]))
@@ -139,7 +149,14 @@ function fileRight(file: PanelRow): Segment[] {
   return lineCounts(file.lines)
 }
 
-function opsBox(activity: Activity | null, frame: number, width: number, now: number): FrameLine[] {
+function opsBox(
+  activity: Activity | null,
+  context: ContextReading | null,
+  isFolded: boolean,
+  frame: number,
+  width: number,
+  now: number,
+): FrameLine[] {
   if (activity === null) {
     return [rule(width, '├', '┤', [bold('OPS')], [dim(`${IDLE_MARK} IDLE`)]), rule(width, '└', '┘', [], [])]
   }
@@ -152,14 +169,22 @@ function opsBox(activity: Activity | null, frame: number, width: number, now: nu
       : dim(`${IDLE_MARK} IDLE`)
   const { reads, edits, calls } = activity.counters
 
+  // Folded, the lanes and the log give way; the context and token rows stay.
+  const work = isFolded
+    ? []
+    : [
+        ...activity.lanes.map((lane, index) =>
+          laneRow(lane, index, activity.isTurnActive, activity.tokensByLabel[lane.label], frame, width),
+        ),
+        [dim(`├${'─'.repeat(width - 2)}┤`)],
+        ...logRows(activity.log, width),
+        row(width, [dim('> '), isBlinkOn(frame) ? { text: '█', color: 'suggestion' } : plain(' ')]),
+      ]
+
   return [
     rule(width, '├', '┤', [bold('OPS')], [status, dim(`  ${clock(now - activity.startedAt)}`)]),
-    ...activity.lanes.map((lane, index) =>
-      laneRow(lane, index, activity.isTurnActive, activity.tokensByLabel[lane.label], frame, width),
-    ),
-    [dim(`├${'─'.repeat(width - 2)}┤`)],
-    ...logRows(activity.log, width),
-    row(width, [dim('> '), isBlinkOn(frame) ? { text: '█', color: 'suggestion' } : plain(' ')]),
+    ...work,
+    ...(context === null ? [] : contextRows(context, width)),
     ...tokenRow(activity, width),
     rule(
       width,
@@ -205,7 +230,49 @@ function laneRow(
   )
 }
 
-/** `TOK in 182k out 24k cache 1.2M  CTX 46%  $1.24`; nothing until something is reported. */
+/**
+ * `CTX ████████░░░░░░▒▒▒  92k/200k 46%`, the bar split by what fills the
+ * window in /context's colors, then the largest parts and where it compacts.
+ */
+function contextRows(context: ContextReading, width: number): FrameLine[] {
+  const { tokens, window, percent: filled, parts, compactAt } = context
+  const amount: Segment[] =
+    tokens === null
+      ? [dim(' waiting')]
+      : [
+          plain(` ${tokenCount(tokens)}/${tokenCount(window)}`),
+          ...(filled === null ? [] : [plain(' '), { text: percent(filled), color: 'warning' as const }]),
+        ]
+  const cells = Math.max(0, inner(width) - 4 - length(amount))
+  const bar = contextBar(parts, cells).map(run => barSegment(run))
+  const legend = contextLegend(parts, LEGEND_PARTS)
+  const named = legend.shown.flatMap(part => [
+    { text: '●', color: part.color },
+    dim(` ${part.name} ${tokenCount(part.tokens)}  `),
+  ])
+
+  return [
+    row(width, [dim('CTX '), ...(bar.length > 0 ? bar : [dim('░'.repeat(cells))])], amount),
+    ...(named.length === 0
+      ? []
+      : [
+          row(
+            width,
+            [plain('    '), ...named, ...(legend.more > 0 ? [dim(`+${legend.more}`)] : [])],
+            compactAt === null ? [] : [dim(`compact @${tokenCount(compactAt)}`)],
+          ),
+        ]),
+  ]
+}
+
+function barSegment(run: BarRun): Segment {
+  if (run.kind === 'used') return { text: '█'.repeat(run.cells), color: run.color }
+  if (run.kind === 'free') return dim('░'.repeat(run.cells))
+
+  return { text: '▒'.repeat(run.cells), color: 'subtle' }
+}
+
+/** `TOK in 182k out 24k cache 1.2M  $1.24`; nothing until something is reported. */
 function tokenRow(activity: Activity, width: number): FrameLine[] {
   const { input, output, cacheRead, cacheWrite } = activity.tokens
   const meter = activity.meter
@@ -220,9 +287,6 @@ function tokenRow(activity: Activity, width: number): FrameLine[] {
       dim(' cache '),
       { text: tokenCount(cacheRead), color: 'subtle' },
     )
-  }
-  if (meter?.contextPercent != null) {
-    segments.push(dim('  CTX '), { text: percent(meter.contextPercent), color: 'warning' })
   }
   if (meter?.usd != null) segments.push(dim('  '), { text: money(meter.usd), color: 'success' })
 

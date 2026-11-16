@@ -2,6 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Activity, Look } from '../types'
+import { asFolds, CONFIRM_MS, compactPress, isArmed, isBusy, OPEN_FOLDS, toggleFold } from './controls'
+import type { FoldSection, PanelControls } from './controls'
 import {
   callEnded,
   callStarted,
@@ -13,6 +15,8 @@ import {
   turnStarted,
 } from './activity'
 import type { CallEnd, CallStart } from './activity'
+import { contextReading } from './context'
+import type { ContextUsage } from './context'
 import { drawMainframe } from './mainframe'
 import { drawNativePanel } from './native-panel'
 import { panelData } from './panel-data'
@@ -28,19 +32,25 @@ const MAX_TREE_ROWS = 14
 const LOOK_KEY = 'look'
 const LOOKS: readonly Look[] = ['auto', 'desktop', 'mainframe']
 const LOOK_USAGE = 'Usage: /where look auto|desktop|mainframe'
+// The `$.store` key the folded sections are kept under, across sessions.
+const FOLDS_KEY = 'folds'
 
 // Change a tag when its value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
 const where = atom({ plugin: 'where', key: 'where' } as const, null, { shape: 'where-2' })
 const activity = atom({ plugin: 'where', key: 'activity' } as const, null, { shape: 'activity-2' })
+const context = atom({ plugin: 'where', key: 'context' } as const, null, { shape: 'context-1' })
 const look = atom({ plugin: 'where', key: 'look' } as const, 'auto')
+const folds = atom({ plugin: 'where', key: 'folds' } as const, OPEN_FOLDS)
+const compactArmedAt = atom({ plugin: 'where', key: 'compactArmedAt' } as const, null)
 
 // The module's own variables start over on a reload; the stored values stay.
 let home: string | undefined
 let isReading = false
 let isQueued = false
 let lastRead = ''
-// Activity changes are written one after another, so none is lost to a race.
+// Activity and context changes are written one after another, so none is
+// lost to a race.
 let recording: Promise<void> = Promise.resolve()
 
 /** One read at a time: calls that come during a read fold into one more read. */
@@ -73,16 +83,29 @@ async function refresh($: EngineInterface): Promise<void> {
   }
 }
 
-/** Queues an activity change; the caller does not wait for it. */
-function record($: EngineInterface, change: (current: Activity) => Activity): void {
+/** Queues a state write; the caller does not wait for it. */
+function enqueue($: EngineInterface, write: () => Promise<unknown>): void {
   recording = recording
     .then(async () => {
-      await update($, activity, current => change(current ?? newActivity(Date.now())))
+      await write()
     })
-    .catch(failure => $.ui.log(`where: activity not recorded: ${String(failure)}`, { to: 'debug' }))
+    .catch(failure => $.ui.log(`where: state not written: ${String(failure)}`, { to: 'debug' }))
 }
 
-/** Reads the session's context fill and cost (a free call) into the activity. */
+/** Queues an activity change. */
+function record($: EngineInterface, change: (current: Activity) => Activity): void {
+  enqueue($, () => update($, activity, current => change(current ?? newActivity(Date.now()))))
+}
+
+/** Queues a context reading, merged with the last one. */
+function recordContext($: EngineInterface, usage: ContextUsage): void {
+  enqueue($, () => update($, context, previous => contextReading(usage, previous)))
+}
+
+/**
+ * After each response: the context fill and the cost, from the free usage
+ * call. The breakdown by category is read at turn ends (`readBreakdown`).
+ */
 async function readMeter($: EngineInterface): Promise<void> {
   try {
     const usage = await $.session.usage()
@@ -93,8 +116,18 @@ async function readMeter($: EngineInterface): Promise<void> {
         usd: usage.cost?.usd ?? null,
       }),
     )
+    recordContext($, usage)
   } catch (failure) {
     $.ui.log(`where: session usage not read: ${String(failure)}`, { to: 'debug' })
+  }
+}
+
+/** The context by category, as /context shows it: estimated locally, no API request. */
+async function readBreakdown($: EngineInterface): Promise<void> {
+  try {
+    recordContext($, await $.session.usage({ breakdown: 'summary' }))
+  } catch (failure) {
+    $.ui.log(`where: context breakdown not read: ${String(failure)}`, { to: 'debug' })
   }
 }
 
@@ -114,6 +147,60 @@ async function chooseLook($: EngineInterface, name: string | undefined): Promise
   return `Where look: ${chosen}.`
 }
 
+/**
+ * Compact: a first press arms it for 5 seconds, a second one in that time
+ * compacts, as `/compact` does. While Claude works it only says so.
+ */
+async function pressCompact($: EngineInterface): Promise<void> {
+  const [armedAt, ops] = await Promise.all([read($, compactArmedAt), read($, activity)])
+  const step = compactPress(armedAt, Date.now(), isBusy(ops))
+
+  switch (step.kind) {
+    case 'busy':
+      $.ui.toast('Claude is working: compact after this turn')
+      return
+    case 'arm':
+      await update($, compactArmedAt, () => step.armedAt)
+      $.clock.after(CONFIRM_MS, () => void disarm($, step.armedAt))
+      return
+    case 'compact':
+      await update($, compactArmedAt, () => null)
+      await compactNow($)
+  }
+}
+
+async function compactNow($: EngineInterface): Promise<void> {
+  try {
+    const result = await $.session.compact()
+
+    $.ui.toast('skip' in result && typeof result.skip === 'string' ? `Compact skipped: ${result.skip}` : 'Conversation compacted')
+  } catch (failure) {
+    $.ui.toast(`Compact failed: ${String(failure)}`)
+  }
+}
+
+/** Takes Compact back to its first step, unless a newer press armed it since. */
+async function disarm($: EngineInterface, armedAt: number): Promise<void> {
+  await update($, compactArmedAt, current => (current === armedAt ? null : current))
+}
+
+/** Folds or unfolds a section, and keeps the choice for the next sessions. */
+async function pressFold($: EngineInterface, section: FoldSection): Promise<void> {
+  const next = toggleFold(await read($, folds), section)
+
+  await update($, folds, () => next)
+  await $.store.set(FOLDS_KEY, next)
+}
+
+/** The buttons for one draw: what they show, and the presses, each run in this module. */
+function controlsFor($: EngineInterface, armedAt: number | null): PanelControls {
+  return {
+    isCompactArmed: isArmed(armedAt, Date.now()),
+    onCompact: () => void pressCompact($),
+    onFold: section => void pressFold($, section),
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -122,8 +209,10 @@ export const register: Register = on => {
     record($, current => resetRunning(current, Date.now()))
 
     const kept = asLook(await $.store.get(LOOK_KEY))
+    const keptFolds = asFolds(await $.store.get(FOLDS_KEY))
 
     if (kept !== null) await update($, look, () => kept)
+    await update($, folds, () => keptFolds)
     await $.command.register({
       name: COMMAND,
       description: 'Show the session folder, its git status and what Claude is doing',
@@ -134,6 +223,7 @@ export const register: Register = on => {
     void $.ui.open({ id: PANE, title: TITLE, placement: 'widget' })
     $.clock.every(REFRESH_MS, () => void refresh($))
     void refresh($)
+    void readBreakdown($)
 
     return started
   })
@@ -157,7 +247,10 @@ export const register: Register = on => {
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) record($, turnEnded)
+    if (e.agentId === undefined) {
+      record($, turnEnded)
+      void readBreakdown($)
+    }
 
     return next(e)
   })
@@ -214,15 +307,23 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const [now, ops, chosen] = await Promise.all([read($, where), read($, activity), read($, look)])
+    const [now, ops, filled, chosen, folded, armedAt] = await Promise.all([
+      read($, where),
+      read($, activity),
+      read($, context),
+      read($, look),
+      read($, folds),
+      read($, compactArmedAt),
+    ])
     const ui = $.ui.resolve(e)
-    const data = panelData(now, ops, home, MAX_TREE_ROWS)
+    const data = panelData(now, ops, filled, folded, home, MAX_TREE_ROWS)
     // Each surface asks for its own drawing: under `auto` the terminal gets
     // the Mainframe console and every other surface the desktop look.
     const isMainframe = chosen === 'mainframe' || (chosen === 'auto' && e.surface === 'terminal')
+    const controls = controlsFor($, armedAt)
 
     return isMainframe
-      ? drawMainframe(ui, data, e.props.bodyColumns)
-      : drawNativePanel(ui, data, Date.now())
+      ? drawMainframe(ui, data, e.props.bodyColumns, controls)
+      : drawNativePanel(ui, data, Date.now(), controls)
   })
 }
