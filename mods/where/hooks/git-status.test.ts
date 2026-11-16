@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { parseStatus, parseWorktreeOf } from './git-status'
+import { parseNumstat, parseStatus, parseWorktreeOf, rootOf } from './git-status'
 
 // Records as `git status --porcelain=v2 --branch -z` writes them, captured
 // from a real repository.
@@ -114,4 +114,35 @@ test('the main checkout is no worktree', () => {
 test('a git folder kept elsewhere tells nothing, so it is no worktree', () => {
   expect(parseWorktreeOf('/Users/me/Dev/app\n/Users/me/git-dirs/app\n')).toBeNull()
   expect(parseWorktreeOf('')).toBeNull()
+})
+
+test('the root is the first line rev-parse writes', () => {
+  expect(rootOf('/Users/me/Dev/app\n/Users/me/Dev/app/.git\n')).toBe('/Users/me/Dev/app')
+  expect(rootOf('')).toBeNull()
+})
+
+test('numstat gives each path its added and removed lines', () => {
+  const counts = parseNumstat('1\t0\tboth.txt\0' + '12\t3\tlib/a b.dart\0')
+
+  expect([...counts]).toEqual([
+    ['both.txt', { added: 1, deleted: 0 }],
+    ['lib/a b.dart', { added: 12, deleted: 3 }],
+  ])
+})
+
+test('a rename is counted under its new path, and does not swallow what follows', () => {
+  // As git wrote it for a rename beside a binary file and a plain one.
+  const counts = parseNumstat(
+    '-\t-\tbin.dat\0' + '1\t0\tboth.txt\0' + '0\t0\t\0old name.txt\0new name.txt\0',
+  )
+
+  expect([...counts]).toEqual([
+    ['bin.dat', 'binary'],
+    ['both.txt', { added: 1, deleted: 0 }],
+    ['new name.txt', { added: 0, deleted: 0 }],
+  ])
+})
+
+test('no output is no counts', () => {
+  expect(parseNumstat('').size).toBe(0)
 })

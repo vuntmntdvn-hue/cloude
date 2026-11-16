@@ -1,6 +1,12 @@
 /** The groups of `git status`, in the order the panel lists them. */
 export type FileGroup = 'conflicted' | 'staged' | 'changed' | 'untracked'
 
+/** Lines a change adds and removes. */
+export type LineCounts = { added: number; deleted: number }
+
+/** A file's line counts, or `binary` where it has no lines to count. */
+export type FileLines = LineCounts | 'binary'
+
 /** One row of the file list: a path under one group, with git's letter for it. */
 export type ChangedFile = {
   group: FileGroup
@@ -10,6 +16,12 @@ export type ChangedFile = {
   path: string
   /** The old path of a rename or copy. */
   from?: string
+  /**
+   * This group's side of the change: staged against the last commit, not
+   * staged against the staged copy, a new file whole. Absent where nothing was
+   * counted: a conflict, a new folder listed whole, a new file over 1 MB.
+   */
+  lines?: FileLines
 }
 
 export type GitBranch = {

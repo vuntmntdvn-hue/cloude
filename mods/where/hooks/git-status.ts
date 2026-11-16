@@ -1,4 +1,4 @@
-import type { ChangedFile, FileGroup, GitBranch, GitStatus } from '../types'
+import type { ChangedFile, FileGroup, FileLines, GitBranch, GitStatus } from '../types'
 
 // The space-separated fields before the path in each porcelain v2 entry.
 const ORDINARY_FIELDS = 8
@@ -7,6 +7,46 @@ const UNMERGED_FIELDS = 10
 
 const UNCHANGED = '.'
 const GIT_DIR_SUFFIX = '/.git'
+// What `--numstat` writes in place of counts for a binary file.
+const NUMSTAT_BINARY = '-'
+
+/**
+ * Reads `git diff --numstat -z` into line counts by path, a rename's by its
+ * new path. A binary file has no line counts.
+ */
+export function parseNumstat(stdout: string): Map<string, FileLines> {
+  const counts = new Map<string, FileLines>()
+  const records = stdout.split('\0')
+
+  for (let i = 0; i < records.length; i += 1) {
+    const record = records[i] ?? ''
+
+    if (record === '') continue
+
+    const [added = '', deleted = '', ...rest] = record.split('\t')
+    let path = rest.join('\t')
+
+    // A rename leaves its path empty: its old and new paths are the next two records.
+    if (path === '') {
+      path = records[i + 2] ?? ''
+      i += 2
+    }
+
+    counts.set(
+      path,
+      added === NUMSTAT_BINARY ? 'binary' : { added: Number(added), deleted: Number(deleted) },
+    )
+  }
+
+  return counts
+}
+
+/** Reads the working tree's root, the first line of `git rev-parse --show-toplevel …`. */
+export function rootOf(stdout: string): string | null {
+  const root = stdout.trim().split('\n')[0] ?? ''
+
+  return root === '' ? null : root
+}
 
 /**
  * Reads `git status --porcelain=v2 --branch -z` into the branch and the

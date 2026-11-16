@@ -1,38 +1,21 @@
 import { atom, read, update } from 'claude-code'
-import type { Color, EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
-import type { ChangedFile, FileGroup } from '../types'
+import { drawPanel } from './panel'
 import { readWhere } from './read-where'
-import {
-  branchLabel,
-  fileLabel,
-  GROUP_LABEL,
-  GROUP_ORDER,
-  inPanelOrder,
-  summary,
-  tildify,
-  trackingLabel,
-} from './view'
 
 const PANE = 'where'
 const TITLE = 'Where'
 const COMMAND = 'where'
 const REFRESH_MS = 5_000
-// The most file rows the expanded panel draws before a `+N more` line.
+// The most file rows the docked panel draws before a `+N more` line.
 const MAX_FILE_ROWS = 200
-// The rows a widget keeps for the folder, worktree, branch and summary lines.
-const WIDGET_HEADER_ROWS = 4
-
-const GROUP_COLOR: Readonly<Record<FileGroup, Color>> = {
-  conflicted: 'error',
-  staged: 'success',
-  changed: 'warning',
-  untracked: 'subtle',
-}
+// The rows a widget keeps for the header, the count tiles, the lines bar and a folder heading.
+const WIDGET_HEADER_ROWS = 10
 
 // Change the tag when `Where`'s fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const where = atom({ plugin: 'where', key: 'where' } as const, null, { shape: 'where-1' })
+const where = atom({ plugin: 'where', key: 'where' } as const, null, { shape: 'where-2' })
 
 // The module's own variables start over on a reload; the stored read stays.
 let home: string | undefined
@@ -106,71 +89,23 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+    const ui = $.ui.resolve(e)
     const now = await read($, where)
 
-    if (now === null) return <Text dimColor>Reading the folder…</Text>
+    if (now === null) {
+      return (
+        <ui.Text size="caption" dimColor>
+          Reading the folder…
+        </ui.Text>
+      )
+    }
 
-    const isWidget = e.props.placement === 'widget'
-    const files = now.git === null ? [] : inPanelOrder(now.git.files)
-    const room = isWidget
-      ? Math.max(0, e.props.scroll.bodyRows - WIDGET_HEADER_ROWS - 1)
-      : MAX_FILE_ROWS
-    const shown = files.slice(0, room)
-    const hidden = files.length - shown.length
+    // A widget shows what fits at a glance; the docked panel scrolls.
+    const maxFileRows =
+      e.props.placement === 'widget'
+        ? Math.max(0, e.props.scroll.bodyRows - WIDGET_HEADER_ROWS)
+        : MAX_FILE_ROWS
 
-    const fileRow = (file: ChangedFile) => (
-      <Box flexDirection="row" gap={1}>
-        <Text color={GROUP_COLOR[file.group]} mono>
-          {file.code}
-        </Text>
-        <Text wrap="truncate-start">{fileLabel(file)}</Text>
-      </Box>
-    )
-
-    // The widget lists files flat to save rows; its colors still tell the groups.
-    const fileRows = isWidget
-      ? shown.map(fileRow)
-      : GROUP_ORDER.flatMap(group => {
-          const inGroup = shown.filter(file => file.group === group)
-
-          return inGroup.length === 0
-            ? []
-            : [
-                <Text color={GROUP_COLOR[group]} bold>
-                  {GROUP_LABEL[group]}
-                </Text>,
-                ...inGroup.map(fileRow),
-              ]
-        })
-
-    return (
-      <Box flexDirection="column">
-        <Text bold wrap="truncate-start">
-          {tildify(now.cwd, home)}
-        </Text>
-        {now.worktreeOf !== null && (
-          <Text dimColor wrap="truncate-start">
-            worktree of {tildify(now.worktreeOf, home)}
-          </Text>
-        )}
-        {now.git === null ? (
-          <Text dimColor>not a git repo</Text>
-        ) : (
-          <Box flexDirection="row" gap={1}>
-            <Text color="claude" bold wrap="truncate-end">
-              {branchLabel(now.git.branch)}
-            </Text>
-            <Text dimColor wrap="truncate-end">
-              {trackingLabel(now.git.branch)}
-            </Text>
-          </Box>
-        )}
-        {now.error !== null && <Text color="error">{now.error}</Text>}
-        {now.git !== null && <Text dimColor>{summary(files)}</Text>}
-        {fileRows}
-        {hidden > 0 && <Text dimColor>+{hidden} more</Text>}
-      </Box>
-    )
+    return drawPanel(ui, now, { home, maxFileRows })
   })
 }

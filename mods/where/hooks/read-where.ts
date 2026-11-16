@@ -1,14 +1,19 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { Where } from '../types'
-import { parseStatus, parseWorktreeOf } from './git-status'
+import type { ChangedFile, FileGroup, FileLines, Where } from '../types'
+import { parseNumstat, parseStatus, parseWorktreeOf, rootOf } from './git-status'
+import { withLineCounts } from './line-counts'
+import { countNewFileLines } from './new-file-lines'
+import type { Disk } from './new-file-lines'
 
 const GIT_TIMEOUT_MS = 10_000
 const NOT_A_REPO = 'not a git repository'
+const NONE: ReadonlyMap<string, FileLines> = new Map()
 
 /**
  * Reads the session's folder and, inside a repository, its branch and changed
- * files. Never rejects: a failure comes back as `error`, for the panel to show.
+ * files with their line counts. Never rejects: a failure comes back as
+ * `error`, for the panel to show.
  */
 export async function readWhere($: EngineInterface): Promise<Where> {
   const cwd = await $.session.cwd()
@@ -34,14 +39,73 @@ export async function readWhere($: EngineInterface): Promise<Where> {
       return { ...outside, error: firstLine(status.stderr) }
     }
 
+    const parsed = parseStatus(status.stdout)
+    const files = await withCounts($, cwd, rootOf(top.stdout), parsed.files)
+
     return {
       cwd,
       worktreeOf: parseWorktreeOf(top.stdout),
-      git: parseStatus(status.stdout),
+      git: { ...parsed, files },
       error: null,
     }
   } catch (failure) {
     return { ...outside, error: `git did not run: ${String(failure)}` }
+  }
+}
+
+/**
+ * Adds line counts, asking only for the sides that have files: a clean tree
+ * runs nothing more. A count that fails leaves its rows uncounted.
+ */
+async function withCounts(
+  $: EngineInterface,
+  cwd: string,
+  root: string | null,
+  files: readonly ChangedFile[],
+): Promise<ChangedFile[]> {
+  const pathsIn = (group: FileGroup) =>
+    files.filter(file => file.group === group).map(file => file.path)
+  const newPaths = pathsIn('untracked')
+
+  const [staged, notStaged, newFiles] = await Promise.all([
+    pathsIn('staged').length > 0 ? numstat($, cwd, ['--cached']) : NONE,
+    pathsIn('changed').length > 0 ? numstat($, cwd, []) : NONE,
+    newPaths.length > 0 && root !== null ? countNewFileLines(diskOf($), root, newPaths) : NONE,
+  ])
+
+  return withLineCounts(files, { staged, notStaged, newFiles })
+}
+
+async function numstat(
+  $: EngineInterface,
+  cwd: string,
+  args: readonly string[],
+): Promise<ReadonlyMap<string, FileLines>> {
+  // `--no-relative` keeps paths from the repository root, as status gives them,
+  // whatever `diff.relative` says.
+  const result = await git($, cwd, [
+    '--no-optional-locks',
+    'diff',
+    '--numstat',
+    '--no-relative',
+    '-z',
+    ...args,
+  ])
+
+  return result.exitCode === 0 ? parseNumstat(result.stdout) : NONE
+}
+
+/** `$.fs` as the new-file counting reads it. */
+function diskOf($: EngineInterface): Disk {
+  return {
+    stat: path => $.fs.stat(path),
+    read: async path => {
+      const text = await $.fs.read(path)
+
+      if (typeof text !== 'string') throw new Error(`${path} did not read as text`)
+
+      return text
+    },
   }
 }
 
